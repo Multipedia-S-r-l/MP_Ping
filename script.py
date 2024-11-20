@@ -14,7 +14,7 @@ from datetime import datetime
 # Configurazione
 CONNECTIONS_FILE = "connections.json"
 monitoring = False
-update_interval = 30#15 * 60  # 15 minuti in secondi
+update_interval = 15 * 60  # 15 minuti in secondi
 completed_pings = 0  # Contatore globale per tenere traccia dei ping completati
 lock = threading.Lock()  # Blocco per evitare condizioni di race quando si modifica il contatore
 down_times = {}
@@ -107,7 +107,7 @@ def ping_connection(conn, last_status, total_connections, update_label, retries=
 
     for _ in range(retries):
         response = ping(ip)
-        if response is not None:
+        if response:
             # print(f"{ip} OK")
             break
         print(f"{ip} nuovo tentativo a breve...")
@@ -120,7 +120,7 @@ def ping_connection(conn, last_status, total_connections, update_label, retries=
         if current_status == "DOWN":
             # Memorizza l'orario di inizio del "DOWN"
             down_times[ip] = datetime.now()
-            print(f"{down_times[ip].strftime("%H:%M:%S")} \tLast: {last_status[ip]} - Current: {current_status}")
+            print(f"{down_times[ip].strftime("%H:%M:%S")} \tIP: {ip} | Last: {last_status[ip]} | Current: {current_status}")
             send_email_alert(name, ip, current_status, f"Connessione DOWN alle {down_times[ip].strftime("%H:%M:%S")}")
         elif current_status == "UP" and ip in down_times:
             # Calcola il tempo di "DOWN" e invia l'email con la durata
@@ -130,9 +130,8 @@ def ping_connection(conn, last_status, total_connections, update_label, retries=
             send_email_alert(name, ip, current_status, f"Tempo di DOWN: {down_minutes} minuti e {down_seconds} secondi")
             del down_times[ip]  # Rimuovi il record di "DOWN" dopo aver notificato
 
-    last_status[ip] = current_status
-
     with lock:
+        last_status[ip] = current_status
         completed_pings += 1
         if completed_pings == total_connections:
             update_label.config(text=f"Ultimo aggiornamento: {datetime.now().strftime("%H:%M:%S")}")
