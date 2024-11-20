@@ -1,4 +1,4 @@
-('C:\\Users\\Assistenza\\Documents\\GitHub\\MP_StatusCake\\build\\script\\PYZ-00.pyz',
+('C:\\Users\\Assistenza\\Documents\\GitHub\\MP_Ping\\build\\script\\PYZ-00.pyz',
  [('_compat_pickle',
    'C:\\Program Files\\Python312\\Lib\\_compat_pickle.py',
    'PYMODULE'),
