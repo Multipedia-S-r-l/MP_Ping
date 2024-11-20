@@ -14,7 +14,7 @@ from datetime import datetime
 # Configurazione
 CONNECTIONS_FILE = "connections.json"
 monitoring = False
-update_interval = 15 * 60  # 15 minuti in secondi
+update_interval = 30#15 * 60  # 15 minuti in secondi
 completed_pings = 0  # Contatore globale per tenere traccia dei ping completati
 lock = threading.Lock()  # Blocco per evitare condizioni di race quando si modifica il contatore
 down_times = {}
@@ -30,6 +30,7 @@ def save_connections(connections):
         json.dump(connections, file, indent=4)
 
 connections = load_connections()
+last_status = {conn["ip"]: None for conn in connections}
 
 def add_connection(name, ip):
     connections.append({"name": name, "ip": ip})
@@ -69,7 +70,6 @@ def send_email_alert(name, ip, status, text=""):
 
 def monitor_ips(status_label, update_label):
     global monitoring, completed_pings
-    last_status = {conn["ip"]: None for conn in connections}
     while monitoring:
         completed_pings = 0  # Resetta il contatore all'inizio di ogni ciclo di monitoraggio
         total_connections = len(connections)  # Numero totale di connessioni
@@ -90,13 +90,24 @@ def ping_connection(conn, last_status, total_connections, update_label, retries=
     ip = conn["ip"]
     name = conn["name"]
 
+    # Salta il ping se la connessione è disabilitata
+    if not conn.get("enabled", True):
+        last_status[conn["ip"]] = "UNKNOWN"
+        with lock:
+            completed_pings += 1
+            if completed_pings == total_connections:
+                update_label.config(text=f"Ultimo aggiornamento: {datetime.now().strftime('%H:%M:%S')}")
+                update_label.update()
+                update_listbox_with_status(last_status)  # Aggiorna la GUI
+        return
+
     for _ in range(retries):
         response = ping(ip)
         if response is not None:
             break
         time.sleep(0.5)  # Pausa tra i tentativi per evitare sovraccarico
 
-    print(f"{ip} Ping response: {response}")
+    # print(f"{ip} Ping response: {response}")
     current_status = "UP" if response else "DOWN"
 
     if last_status[ip] is not None and last_status[ip] != current_status:
@@ -137,10 +148,14 @@ def stop_monitoring(start_button, stop_button):
 
 def update_status_totals(last_status):
     total_connections = len(connections)
+    paused_count = sum(1 for conn in connections if not conn.get("enabled", True))
     up_count = sum(1 for status in last_status.values() if status == "UP")
-    down_count = total_connections - up_count
+    down_count = sum(1 for status in last_status.values() if status == "DOWN")
+    # down_count = total_connections - up_count
 
-    global up_label, down_label
+    global total_label, paused_label, up_label, down_label
+    total_label.config(text=f"Connessioni totali: {total_connections}")
+    paused_label.config(text=f"Connessioni in pausa: {paused_count}")
     up_label.config(text=f"Connessioni UP: {up_count}")
     down_label.config(text=f"Connessioni DOWN: {down_count}")
 
@@ -151,9 +166,16 @@ def update_listbox_with_status(last_status):
     for conn in connections:
         ip = conn["ip"]
         name = conn["name"]
+        enabled = conn["enabled"]
         current_status = last_status.get(ip, "UNKNOWN")
-        status_text = f"✅" if current_status == "UP" else "❌"
-        listbox.insert(tk.END, f"{status_text} {name} | {ip}")
+        if current_status == "UP":
+            status_text = "✅"
+        elif current_status == "DOWN":
+            status_text = "❌"
+        else:
+            status_text = "❓"
+        status_indicator = "🔝" if enabled else "🟢"
+        listbox.insert(tk.END, f"{status_indicator} {status_text} {name} | {ip}")
 
     update_status_totals(last_status)
 
@@ -179,6 +201,16 @@ def create_gui():
             remove_connection(index)
             update_status_totals({})
 
+    def toggle_connection_status():
+        selected = listbox.curselection()
+        if selected:
+            index = selected[0]
+            connections[index]["enabled"] = not connections[index]["enabled"]
+            selected_ip = connections[index]["ip"]
+            last_status[selected_ip] = "UNKNOWN"
+            update_listbox_with_status(last_status)
+            save_connections(connections)
+
     root = tk.Tk()
     root.title("Gestore Connessioni")
     root.geometry("790x600")  # Imposta dimensioni della finestra
@@ -196,7 +228,10 @@ def create_gui():
     add_button.grid(row=1, column=2, padx=10, pady=5, sticky="e")
 
     remove_button = tk.Button(root, text="🗑️ Rimuovi Connessione selezionata", command=remove_selected_connection)
-    remove_button.grid(row=2, column=0, columnspan=3, pady=10)
+    remove_button.grid(row=2, column=0, pady=10)
+
+    toggle_button = tk.Button(root, text="⏯️ Pausa/Riprendi", command=toggle_connection_status)
+    toggle_button.grid(row=2, column=1, padx=10, pady=10)
 
     global listbox
     listbox = tk.Listbox(root, height=20, width=120)
@@ -204,24 +239,30 @@ def create_gui():
     for conn in connections:
         listbox.insert(tk.END, f"{conn['name']} - {conn['ip']}")
 
-    global up_label, down_label
+    global total_label, paused_label, up_label, down_label
+    total_label = tk.Label(root, text="Connessioni totali: 0")
+    total_label.grid(row=4, column=0, padx=25, pady=(0, 5), sticky="w")
+
+    paused_label = tk.Label(root, text="Connessioni in pausa: 0", fg="blue")
+    paused_label.grid(row=4, column=1, pady=(0, 5), sticky="e")
+
     up_label = tk.Label(root, text="Connessioni UP: 0", fg="green")
-    up_label.grid(row=4, column=0, padx=25, pady=5, sticky="w")
+    up_label.grid(row=5, column=0, padx=25, pady=(0, 5), sticky="w")
 
     down_label = tk.Label(root, text="Connessioni DOWN: 0", fg="red")
-    down_label.grid(row=4, column=1, pady=5, sticky="e")
+    down_label.grid(row=5, column=1, pady=(0, 5), sticky="e")
     
     status_label = tk.Label(root, text="Monitoraggio non attivo")
-    status_label.grid(row=5, column=0, pady=5)
+    status_label.grid(row=6, column=0, pady=5)
     
     update_label = tk.Label(root, text="Ultimo aggiornamento: MAI")
-    update_label.grid(row=5, column=1, pady=5)
+    update_label.grid(row=6, column=1, pady=5)
 
     start_button = tk.Button(root, text="Inizia Monitoraggio ▶️", command=lambda: start_monitoring(status_label, update_label, start_button, stop_button))
-    start_button.grid(row=6, column=0, columnspan=3, pady=10)
+    start_button.grid(row=7, column=0, columnspan=3, pady=10)
 
     stop_button = tk.Button(root, text="Ferma Monitoraggio ⏸️", command=lambda: stop_monitoring(start_button, stop_button))
-    stop_button.grid(row=6, column=0, columnspan=3, pady=10)
+    stop_button.grid(row=7, column=0, columnspan=3, pady=10)
 
     start_button.grid()  # Inizialmente, il pulsante "Inizia" è visibile
     stop_button.grid_remove()  # Nascondi il pulsante "Ferma"
