@@ -9,13 +9,15 @@ from ping3 import ping
 import tkinter as tk
 from tkinter import messagebox
 from threading import Thread
+from datetime import datetime
 
 # Configurazione
 CONNECTIONS_FILE = "connections.json"
 monitoring = False
-update_interval = 5 * 60  # 5 minuti in secondi
+update_interval = 30#15 * 60  # 15 minuti in secondi
 completed_pings = 0  # Contatore globale per tenere traccia dei ping completati
 lock = threading.Lock()  # Blocco per evitare condizioni di race quando si modifica il contatore
+down_times = {}
 
 def load_connections():
     if os.path.exists(CONNECTIONS_FILE):
@@ -37,7 +39,7 @@ def remove_connection(index):
     del connections[index]
     save_connections(connections)
 
-def send_email_alert(name, ip, status):
+def send_email_alert(name, ip, status, text=""):
     # Configura l'invio di email qui
     print(f"ALERT: {name} ({ip}) è ora {status}")
 
@@ -49,7 +51,7 @@ def send_email_alert(name, ip, status):
 
     # Creazione del messaggio
     subject = f"Connessione {status}: {name} ({ip})"
-    body = f"L'indirizzo IP {ip} ({name}) è ora {status}."
+    body = f"L'indirizzo IP {ip} per la connessione {name} è ora {status}.\n\n{text}"
     msg = MIMEMultipart()
     msg["From"] = f"{sender_name} <{sender_email}>"
     msg["To"] = recipient_email
@@ -83,14 +85,33 @@ def monitor_ips(update_label):
             update_label.update()
             time.sleep(1)
 
-def ping_connection(conn, last_status, total_connections):
+def ping_connection(conn, last_status, total_connections, retries=10):
     global completed_pings
     ip = conn["ip"]
     name = conn["name"]
-    response = ping(ip)
+
+    for _ in range(retries):
+        response = ping(ip)
+        if response is not None:
+            break
+        time.sleep(0.5)  # Pausa tra i tentativi per evitare sovraccarico
+
+    # print(f"{ip} Ping response: {response}")
     current_status = "UP" if response else "DOWN"
+
     if last_status[ip] is not None and last_status[ip] != current_status:
-        send_email_alert(name, ip, current_status)
+        if current_status == "DOWN":
+            # Memorizza l'orario di inizio del "DOWN"
+            down_times[ip] = datetime.now()
+            send_email_alert(name, ip, current_status, f"Connessione DOWN alle {down_times[ip].strftime("%H:%M:%S")}")
+        elif current_status == "UP" and ip in down_times:
+            # Calcola il tempo di "DOWN" e invia l'email con la durata
+            down_duration = datetime.now() - down_times[ip]
+            down_minutes = int(down_duration.total_seconds() / 60)
+            down_seconds = int(down_duration.total_seconds() % 60)
+            send_email_alert(name, ip, current_status, f"Tempo di DOWN: {down_minutes} minuti e {down_seconds} secondi")
+            del down_times[ip]  # Rimuovi il record di "DOWN" dopo aver notificato
+
     last_status[ip] = current_status
 
     with lock:
@@ -119,11 +140,8 @@ def update_listbox_with_status(last_status):
     for conn in connections:
         ip = conn["ip"]
         name = conn["name"]
-        # Determina lo stato corrente (supponendo che tu mantenga uno stato in una variabile/dizionario)
         current_status = last_status.get(ip, "UNKNOWN")  # Puoi aggiornare questa logica con il tuo monitoraggio
         status_text = f"✅" if current_status == "UP" else "❌"
-        
-        # Aggiungi l'elemento alla listbox con il colore appropriato
         listbox.insert(tk.END, f"{status_text} {name} | {ip}")
 
 # Creazione dell'interfaccia GUI
