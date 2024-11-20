@@ -18,6 +18,7 @@ update_interval = 30#15 * 60  # 15 minuti in secondi
 completed_pings = 0  # Contatore globale per tenere traccia dei ping completati
 lock = threading.Lock()  # Blocco per evitare condizioni di race quando si modifica il contatore
 down_times = {}
+editing_index = None
 
 def load_connections():
     if os.path.exists(CONNECTIONS_FILE):
@@ -33,10 +34,13 @@ connections = load_connections()
 last_status = {conn["ip"]: None for conn in connections}
 
 def add_connection(name, ip):
-    connections.append({"name": name, "ip": ip})
+    connections.append({"name": name, "ip": ip, "enabled": True})
     save_connections(connections)
+    last_status[ip] = "UNKNOWN"
 
 def remove_connection(index):
+    selected_ip = connections[index]["ip"]
+    del last_status[selected_ip]
     del connections[index]
     save_connections(connections)
 
@@ -104,7 +108,9 @@ def ping_connection(conn, last_status, total_connections, update_label, retries=
     for _ in range(retries):
         response = ping(ip)
         if response is not None:
+            # print(f"{ip} OK")
             break
+        print(f"{ip} nuovo tentativo a breve...")
         time.sleep(0.5)  # Pausa tra i tentativi per evitare sovraccarico
 
     # print(f"{ip} Ping response: {response}")
@@ -114,6 +120,7 @@ def ping_connection(conn, last_status, total_connections, update_label, retries=
         if current_status == "DOWN":
             # Memorizza l'orario di inizio del "DOWN"
             down_times[ip] = datetime.now()
+            print(f"{down_times[ip].strftime("%H:%M:%S")} \tLast: {last_status[ip]} - Current: {current_status}")
             send_email_alert(name, ip, current_status, f"Connessione DOWN alle {down_times[ip].strftime("%H:%M:%S")}")
         elif current_status == "UP" and ip in down_times:
             # Calcola il tempo di "DOWN" e invia l'email con la durata
@@ -185,8 +192,13 @@ def create_gui():
         name = name_entry.get()
         ip = ip_entry.get()
         if name and ip:
+            global editing_index
+            if editing_index is not None:
+                listbox.delete(editing_index)
+                remove_connection(editing_index)
+                editing_index = None
             add_connection(name, ip)
-            listbox.insert(tk.END, f"❓ {name} | {ip}")
+            listbox.insert(tk.END, f"🔝 ❓ {name} | {ip}")
             name_entry.delete(0, tk.END)
             ip_entry.delete(0, tk.END)
             update_status_totals({})
@@ -211,6 +223,15 @@ def create_gui():
             update_listbox_with_status(last_status)
             save_connections(connections)
 
+    def change_selected_connection():
+        selected = listbox.curselection()
+        if selected:
+            index = selected[0]
+            global editing_index
+            editing_index = index
+            name_entry.insert(0, connections[index]["name"])
+            ip_entry.insert(0, connections[index]["ip"])
+
     root = tk.Tk()
     root.title("Gestore Connessioni")
     root.geometry("790x600")  # Imposta dimensioni della finestra
@@ -228,16 +249,19 @@ def create_gui():
     add_button.grid(row=1, column=2, padx=10, pady=5, sticky="e")
 
     remove_button = tk.Button(root, text="🗑️ Rimuovi Connessione selezionata", command=remove_selected_connection)
-    remove_button.grid(row=2, column=0, pady=10)
+    remove_button.grid(row=2, column=0, padx=25, pady=10, sticky="w")
 
     toggle_button = tk.Button(root, text="⏯️ Pausa/Riprendi", command=toggle_connection_status)
     toggle_button.grid(row=2, column=1, padx=10, pady=10)
+
+    toggle_button = tk.Button(root, text="✏️ Modifica", command=change_selected_connection)
+    toggle_button.grid(row=2, column=2, padx=10, pady=10)
 
     global listbox
     listbox = tk.Listbox(root, height=20, width=120)
     listbox.grid(row=3, column=0, columnspan=3, padx=10, pady=10)
     for conn in connections:
-        listbox.insert(tk.END, f"{conn['name']} - {conn['ip']}")
+        listbox.insert(tk.END, f"❓ {conn['name']} | {conn['ip']}")
 
     global total_label, paused_label, up_label, down_label
     total_label = tk.Label(root, text="Connessioni totali: 0")
