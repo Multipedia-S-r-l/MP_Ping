@@ -14,7 +14,7 @@ from datetime import datetime
 # Configurazione
 CONNECTIONS_FILE = "connections.json"
 monitoring = False
-update_interval = 30#15 * 60  # 15 minuti in secondi
+update_interval = 15 * 60  # 15 minuti in secondi
 completed_pings = 0  # Contatore globale per tenere traccia dei ping completati
 lock = threading.Lock()  # Blocco per evitare condizioni di race quando si modifica il contatore
 down_times = {}
@@ -67,7 +67,7 @@ def send_email_alert(name, ip, status, text=""):
     except Exception as e:
         print(f"Errore nell'invio dell'email: {e}")
 
-def monitor_ips(update_label):
+def monitor_ips(status_label, update_label):
     global monitoring, completed_pings
     last_status = {conn["ip"]: None for conn in connections}
     while monitoring:
@@ -75,17 +75,17 @@ def monitor_ips(update_label):
         total_connections = len(connections)  # Numero totale di connessioni
 
         for conn in connections:
-            Thread(target=ping_connection, args=(conn, last_status, total_connections)).start()
+            Thread(target=ping_connection, args=(conn, last_status, total_connections, update_label)).start()
 
         for i in range(update_interval, 0, -1):
             if not monitoring:
-                update_label.config(text="Monitoraggio non attivo")
+                status_label.config(text="Monitoraggio non attivo")
                 break
-            update_label.config(text=f"Prossimo ping in {i} secondi")
-            update_label.update()
+            status_label.config(text=f"Prossimo ping in {i} secondi")
+            status_label.update()
             time.sleep(1)
 
-def ping_connection(conn, last_status, total_connections, retries=10):
+def ping_connection(conn, last_status, total_connections, update_label, retries=10):
     global completed_pings
     ip = conn["ip"]
     name = conn["name"]
@@ -96,7 +96,7 @@ def ping_connection(conn, last_status, total_connections, retries=10):
             break
         time.sleep(0.5)  # Pausa tra i tentativi per evitare sovraccarico
 
-    # print(f"{ip} Ping response: {response}")
+    print(f"{ip} Ping response: {response}")
     current_status = "UP" if response else "DOWN"
 
     if last_status[ip] is not None and last_status[ip] != current_status:
@@ -117,21 +117,32 @@ def ping_connection(conn, last_status, total_connections, retries=10):
     with lock:
         completed_pings += 1
         if completed_pings == total_connections:
+            update_label.config(text=f"Ultimo aggiornamento: {datetime.now().strftime("%H:%M:%S")}")
+            update_label.update()
             update_listbox_with_status(last_status)  # Aggiorna la GUI solo quando tutti i ping sono completati
 
-def start_monitoring(update_label, start_button, stop_button):
+def start_monitoring(status_label, update_label, start_button, stop_button):
     global monitoring
     if not monitoring:
         monitoring = True
         start_button.grid_remove()  # Nascondi il pulsante "Inizia"
         stop_button.grid()  # Mostra il pulsante "Ferma"
-        Thread(target=monitor_ips, args=(update_label,), daemon=True).start()
+        Thread(target=monitor_ips, args=(status_label, update_label), daemon=True).start()
 
 def stop_monitoring(start_button, stop_button):
     global monitoring
     monitoring = False
     stop_button.grid_remove()  # Nascondi il pulsante "Ferma"
     start_button.grid()  # Mostra il pulsante "Inizia"
+
+def update_status_totals(last_status):
+    total_connections = len(connections)
+    up_count = sum(1 for status in last_status.values() if status == "UP")
+    down_count = total_connections - up_count
+
+    global up_label, down_label
+    up_label.config(text=f"Connessioni UP: {up_count}")
+    down_label.config(text=f"Connessioni DOWN: {down_count}")
 
 def update_listbox_with_status(last_status):
     # Rimuovi tutti i dati esistenti e aggiorna con gli stati correnti
@@ -140,9 +151,11 @@ def update_listbox_with_status(last_status):
     for conn in connections:
         ip = conn["ip"]
         name = conn["name"]
-        current_status = last_status.get(ip, "UNKNOWN")  # Puoi aggiornare questa logica con il tuo monitoraggio
+        current_status = last_status.get(ip, "UNKNOWN")
         status_text = f"✅" if current_status == "UP" else "❌"
         listbox.insert(tk.END, f"{status_text} {name} | {ip}")
+
+    update_status_totals(last_status)
 
 # Creazione dell'interfaccia GUI
 def create_gui():
@@ -154,6 +167,7 @@ def create_gui():
             listbox.insert(tk.END, f"❓ {name} | {ip}")
             name_entry.delete(0, tk.END)
             ip_entry.delete(0, tk.END)
+            update_status_totals({})
         else:
             messagebox.showwarning("Attenzione", "Inserisci un nome e un IP validi.")
 
@@ -163,10 +177,11 @@ def create_gui():
             index = selected[0]
             listbox.delete(index)
             remove_connection(index)
+            update_status_totals({})
 
     root = tk.Tk()
     root.title("Gestore Connessioni")
-    root.geometry("790x550")  # Imposta dimensioni della finestra
+    root.geometry("790x600")  # Imposta dimensioni della finestra
 
     # Elementi grafici
     tk.Label(root, text="Nome").grid(row=0, column=0, padx=15, pady=(10, 0), sticky="w")
@@ -189,20 +204,30 @@ def create_gui():
     for conn in connections:
         listbox.insert(tk.END, f"{conn['name']} - {conn['ip']}")
 
-    status_label = tk.Label(root, text="Monitoraggio non attivo")
-    status_label.grid(row=4, column=0, columnspan=3, pady=5)
+    global up_label, down_label
+    up_label = tk.Label(root, text="Connessioni UP: 0", fg="green")
+    up_label.grid(row=4, column=0, padx=25, pady=5, sticky="w")
 
-    start_button = tk.Button(root, text="Inizia Monitoraggio ▶️", command=lambda: start_monitoring(status_label, start_button, stop_button))
-    start_button.grid(row=5, column=0, columnspan=3, pady=10)
+    down_label = tk.Label(root, text="Connessioni DOWN: 0", fg="red")
+    down_label.grid(row=4, column=1, pady=5, sticky="e")
+    
+    status_label = tk.Label(root, text="Monitoraggio non attivo")
+    status_label.grid(row=5, column=0, pady=5)
+    
+    update_label = tk.Label(root, text="Ultimo aggiornamento: MAI")
+    update_label.grid(row=5, column=1, pady=5)
+
+    start_button = tk.Button(root, text="Inizia Monitoraggio ▶️", command=lambda: start_monitoring(status_label, update_label, start_button, stop_button))
+    start_button.grid(row=6, column=0, columnspan=3, pady=10)
 
     stop_button = tk.Button(root, text="Ferma Monitoraggio ⏸️", command=lambda: stop_monitoring(start_button, stop_button))
-    stop_button.grid(row=5, column=0, columnspan=3, pady=10)
+    stop_button.grid(row=6, column=0, columnspan=3, pady=10)
 
     start_button.grid()  # Inizialmente, il pulsante "Inizia" è visibile
     stop_button.grid_remove()  # Nascondi il pulsante "Ferma"
 
     # Avvia automaticamente il monitoraggio all'avvio del programma
-    start_monitoring(status_label, start_button, stop_button)
+    start_monitoring(status_label, update_label, start_button, stop_button)
 
     root.mainloop()
 
