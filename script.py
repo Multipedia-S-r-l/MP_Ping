@@ -50,7 +50,7 @@ def send_email_alert(name, ip, status, text=""):
 
     sender_email = "postmaster@multipedia.it"  # Inserisci la tua email
     sender_password = "pm-MP@22"  # Inserisci la tua password (assicurati di tenerla al sicuro)
-    recipient_email = "assistenza@multipedia.it"  # Inserisci l'email del destinatario
+    recipient_email = "ticket@multipedia.it"  # Inserisci l'email del destinatario
     smtp_server = "out.postassl.it"  # Server SMTP del tuo provider (es. smtp.gmail.com per Gmail)
     sender_name = "Multipedia Ping"  # Nome che desideri mostrare come mittente
 
