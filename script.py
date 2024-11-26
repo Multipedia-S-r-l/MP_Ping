@@ -52,14 +52,22 @@ last_status = {conn["ip"]: None for conn in connections}
 
 def add_connection(name, ip):
     connections.append({"name": name, "ip": ip, "enabled": True})
+    connections.sort(key=sort_key)  # Ordina dopo l'aggiunta
     save_connections(connections)
     last_status[ip] = "UNKNOWN"
+    update_listbox_with_status(last_status)
 
 def remove_connection(index):
     selected_ip = connections[index]["ip"]
     del last_status[selected_ip]
     del connections[index]
     save_connections(connections)
+
+def sort_key(connection):
+    # Rimuove la parte fino al primo trattino incluso per determinare la chiave di ordinamento
+    name = connection["name"]
+    return name.split("-", 1)[-1].strip()  # Prende tutto dopo il primo trattino
+
 
 def send_email_alert(name, ip, status, text=""):
     # Configura l'invio di email qui
@@ -292,13 +300,11 @@ def create_gui():
                 if not is_valid_ip(new_ip):
                     messagebox.showwarning("Attenzione", "Inserisci un indirizzo IP valido!")
                     return
-                if is_ip_duplicate(new_ip):
+                if is_ip_duplicate(new_ip, index):
                     messagebox.showwarning("Attenzione", "L'indirizzo IP è già presente!")
                     return
-                connections[index]["name"] = new_name
-                connections[index]["ip"] = new_ip
-                save_connections(connections)
-                update_listbox_with_status(last_status)
+                remove_connection(index)
+                add_connection(new_name, new_ip)
                 edit_window.destroy()  # Chiudi la finestra
 
             # Bottoni
