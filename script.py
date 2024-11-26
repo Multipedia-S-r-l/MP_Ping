@@ -181,7 +181,6 @@ def update_status_totals(last_status):
     paused_count = sum(1 for conn in connections if not conn.get("enabled", True))
     up_count = sum(1 for status in last_status.values() if status == "UP")
     down_count = sum(1 for status in last_status.values() if status == "DOWN")
-    # down_count = total_connections - up_count
 
     global total_label, paused_label, up_label, down_label
     total_label.config(text=f"Connessioni totali: {total_connections}")
@@ -262,7 +261,6 @@ def create_gui():
         listbox.insert(tk.END, f"🔝 ❓ {name} | {ip}")
         name_entry.delete(0, tk.END)
         ip_entry.delete(0, tk.END)
-        update_status_totals({})
 
     def remove_selected_connection():
         selected = listbox.curselection()
@@ -270,7 +268,6 @@ def create_gui():
             index = selected[0]
             listbox.delete(index)
             remove_connection(index)
-            update_status_totals({})
         else:
             messagebox.showwarning("Attenzione", "Nessuna connessione selezionata!")
 
