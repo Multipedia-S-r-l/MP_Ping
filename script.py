@@ -62,6 +62,7 @@ def remove_connection(index):
     del last_status[selected_ip]
     del connections[index]
     save_connections(connections)
+    update_listbox_with_status(last_status)
 
 def sort_key(connection):
     # Rimuove la parte fino al primo trattino incluso per determinare la chiave di ordinamento
@@ -179,11 +180,12 @@ def stop_monitoring(start_button, stop_button):
 def update_status_totals(last_status):
     total_connections = len(connections)
     paused_count = sum(1 for conn in connections if not conn.get("enabled", True))
+    unknown_count = sum(1 for status in last_status.values() if status == "UNKNOWN")
     up_count = sum(1 for status in last_status.values() if status == "UP")
     down_count = sum(1 for status in last_status.values() if status == "DOWN")
 
     global total_label, paused_label, up_label, down_label
-    total_label.config(text=f"Connessioni totali: {total_connections}")
+    total_label.config(text=f"Connessioni totali: {total_connections} di cui {unknown_count} ancora da verificare")
     paused_label.config(text=f"Connessioni in pausa: {paused_count}")
     up_label.config(text=f"Connessioni UP: {up_count}")
     down_label.config(text=f"Connessioni DOWN: {down_count}")
@@ -258,7 +260,6 @@ def create_gui():
             messagebox.showwarning("Attenzione", "L'indirizzo IP è già presente!")
             return
         add_connection(name, ip)
-        listbox.insert(tk.END, f"🔝 ❓ {name} | {ip}")
         name_entry.delete(0, tk.END)
         ip_entry.delete(0, tk.END)
 
@@ -266,7 +267,6 @@ def create_gui():
         selected = listbox.curselection()
         if selected:
             index = selected[0]
-            listbox.delete(index)
             remove_connection(index)
         else:
             messagebox.showwarning("Attenzione", "Nessuna connessione selezionata!")
