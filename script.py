@@ -208,6 +208,13 @@ def is_valid_ip(ip):
         return True
     except ValueError:
         return False
+    
+def is_ip_duplicate(ip, index_to_ignore=None):
+    # index_to_ignore: L'indice da ignorare (utile per le modifiche).
+    for index, conn in enumerate(connections):
+        if conn["ip"] == ip and index != index_to_ignore:
+            return True
+    return False
 
 # Creazione dell'interfaccia GUI
 def create_gui():
@@ -219,6 +226,9 @@ def create_gui():
             return
         if not is_valid_ip(ip):
             messagebox.showwarning("Attenzione", "Inserisci un indirizzo IP valido!")
+            return
+        if is_ip_duplicate(ip):
+            messagebox.showwarning("Attenzione", "L'indirizzo IP è già presente!")
             return
         add_connection(name, ip)
         listbox.insert(tk.END, f"🔝 ❓ {name} | {ip}")
@@ -281,6 +291,9 @@ def create_gui():
                     return
                 if not is_valid_ip(new_ip):
                     messagebox.showwarning("Attenzione", "Inserisci un indirizzo IP valido!")
+                    return
+                if is_ip_duplicate(new_ip):
+                    messagebox.showwarning("Attenzione", "L'indirizzo IP è già presente!")
                     return
                 connections[index]["name"] = new_name
                 connections[index]["ip"] = new_ip
