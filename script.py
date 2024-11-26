@@ -336,7 +336,7 @@ def create_gui():
         if not name_query and not ip_query:
             messagebox.showwarning("Attenzione", "Inserisci un nome o un indirizzo IP!")
             return
-        if not is_valid_ip(ip_query):
+        if ip_query and not is_valid_ip(ip_query):
             messagebox.showwarning("Attenzione", "Inserisci un indirizzo IP valido!")
             return
         highlight_search_results(name_query, ip_query)
