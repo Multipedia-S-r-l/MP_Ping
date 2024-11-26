@@ -3,6 +3,7 @@ import os
 import threading
 import time
 import smtplib
+import portalocker
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from ping3 import ping
@@ -20,14 +21,30 @@ lock = threading.Lock()  # Blocco per evitare condizioni di race quando si modif
 down_times = {}
 
 def load_connections():
-    if os.path.exists(CONNECTIONS_FILE):
-        with open(CONNECTIONS_FILE, "r") as file:
-            return json.load(file)
+    try:
+        if os.path.exists(CONNECTIONS_FILE):
+            with open(CONNECTIONS_FILE, "r") as file:
+                return json.load(file)
+    except Exception as e:
+        messagebox.showerror(f"Errore durante il caricamento delle connessioni: {e}")
+        exit
     return []
 
 def save_connections(connections):
-    with open(CONNECTIONS_FILE, "w") as file:
-        json.dump(connections, file, indent=4)
+    for attempt in range(5):  # Prova 5 volte
+        try:
+            with open(CONNECTIONS_FILE, "w") as file:
+                # Blocca il file per impedirne l'accesso simultaneo
+                portalocker.lock(file, portalocker.LOCK_EX)
+                json.dump(connections, file, indent=4)
+                # Rilascia il blocco
+                portalocker.unlock(file)
+            return
+        except Exception as e:
+            print(f"Errore al tentativo {attempt + 1}: {e}")
+            time.sleep(0.5)  # Aspetta mezzo secondo prima di riprovare
+    messagebox.showerror("Impossibile salvare le connessioni dopo 5 tentativi.")
+    exit
 
 connections = load_connections()
 last_status = {conn["ip"]: None for conn in connections}
