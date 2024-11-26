@@ -66,8 +66,7 @@ def remove_connection(index):
 def sort_key(connection):
     # Rimuove la parte fino al primo trattino incluso per determinare la chiave di ordinamento
     name = connection["name"]
-    return name.split("-", 1)[-1].strip()  # Prende tutto dopo il primo trattino
-
+    return name.split("-", 1)[-1].strip().lower()  # Prende tutto dopo il primo trattino
 
 def send_email_alert(name, ip, status, text=""):
     # Configura l'invio di email qui
@@ -210,6 +209,27 @@ def update_listbox_with_status(last_status):
 
     update_status_totals(last_status)
 
+def highlight_search_results(name_query, ip_query):
+    listbox.selection_clear(0, tk.END)  # Rimuovi qualsiasi selezione precedente
+    found_indices = []
+
+    # Cerca e registra gli indici corrispondenti
+    for index, conn in enumerate(connections):
+        if (name_query and name_query.lower() in conn["name"].lower()) or (ip_query and conn["ip"] == ip_query):
+            found_indices.append(index)
+    
+    # Evidenzia i risultati trovati
+    for idx in found_indices:
+        listbox.selection_set(idx)
+
+    # Scorri automaticamente al primo risultato
+    if found_indices:
+        listbox.see(found_indices[0])
+    else:
+        messagebox.showinfo("Ricerca", "Nessuna connessione trovata")
+
+    return found_indices
+
 def is_valid_ip(ip):
     try:
         ipaddress.ip_address(ip)
@@ -313,6 +333,17 @@ def create_gui():
         else:
             messagebox.showwarning("Attenzione", "Nessuna connessione selezionata!")
 
+    def search_gui():
+        name_query = name_entry.get()
+        ip_query = ip_entry.get()
+        if not name_query and not ip_query:
+            messagebox.showwarning("Attenzione", "Inserisci un nome o un indirizzo IP!")
+            return
+        if not is_valid_ip(ip_query):
+            messagebox.showwarning("Attenzione", "Inserisci un indirizzo IP valido!")
+            return
+        highlight_search_results(name_query, ip_query)
+
     root = tk.Tk()
     root.title("Gestore Connessioni")
     root.geometry("790x600")  # Imposta dimensioni della finestra
@@ -329,20 +360,35 @@ def create_gui():
     add_button = tk.Button(root, text="Aggiungi ➕", command=add_connection_gui)
     add_button.grid(row=1, column=2, padx=10, pady=5, sticky="e")
 
-    remove_button = tk.Button(root, text="🗑️ Rimuovi Connessione selezionata", command=remove_selected_connection)
+    remove_button = tk.Button(root, text="Rimuovi Connessione selezionata 🗑️", command=remove_selected_connection)
     remove_button.grid(row=2, column=0, padx=25, pady=10, sticky="w")
 
-    toggle_button = tk.Button(root, text="⏯️ Pausa/Riprendi", command=toggle_connection_status)
-    toggle_button.grid(row=2, column=1, padx=10, pady=10)
+    toggle_button = tk.Button(root, text="Pausa/Riprendi ⏯️", command=toggle_connection_status)
+    toggle_button.grid(row=2, column=1, padx=10, pady=10, sticky="w")
 
-    toggle_button = tk.Button(root, text="✏️ Modifica", command=change_selected_connection)
+    toggle_button = tk.Button(root, text="Modifica ✏️", command=change_selected_connection)
     toggle_button.grid(row=2, column=2, padx=10, pady=10)
 
+    search_button = tk.Button(root, text="Cerca 🔍", command=search_gui)
+    search_button.grid(row=2, column=1, padx=10, pady=5, sticky="e")
+
+    # Creazione di un frame per contenere la Listbox e la Scrollbar
+    frame = tk.Frame(root)
+    frame.grid(row=3, column=0, columnspan=3, padx=10, pady=10)
+
+    # Scrollbar verticale
+    scrollbar = tk.Scrollbar(frame, orient=tk.VERTICAL)
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
     global listbox
-    listbox = tk.Listbox(root, height=20, width=120)
-    listbox.grid(row=3, column=0, columnspan=3, padx=10, pady=10)
+    listbox = tk.Listbox(frame, height=20, width=120, yscrollcommand=scrollbar.set)
+    listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    # listbox.grid(row=3, column=0, columnspan=3, padx=10, pady=10)
     for conn in connections:
         listbox.insert(tk.END, f"❓ {conn['name']} | {conn['ip']}")
+
+    # Associa la scrollbar alla Listbox
+    scrollbar.config(command=listbox.yview)
 
     global total_label, paused_label, up_label, down_label
     total_label = tk.Label(root, text="Connessioni totali: 0")
