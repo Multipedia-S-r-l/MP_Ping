@@ -18,7 +18,6 @@ update_interval = 15 * 60  # 15 minuti in secondi
 completed_pings = 0  # Contatore globale per tenere traccia dei ping completati
 lock = threading.Lock()  # Blocco per evitare condizioni di race quando si modifica il contatore
 down_times = {}
-editing_index = None
 
 def load_connections():
     if os.path.exists(CONNECTIONS_FILE):
@@ -191,11 +190,6 @@ def create_gui():
         name = name_entry.get()
         ip = ip_entry.get()
         if name and ip:
-            global editing_index
-            if editing_index is not None:
-                listbox.delete(editing_index)
-                remove_connection(editing_index)
-                editing_index = None
             add_connection(name, ip)
             listbox.insert(tk.END, f"🔝 ❓ {name} | {ip}")
             name_entry.delete(0, tk.END)
@@ -211,6 +205,8 @@ def create_gui():
             listbox.delete(index)
             remove_connection(index)
             update_status_totals({})
+        else:
+            messagebox.showwarning("Attenzione", "Nessuna connessione selezionata!")
 
     def toggle_connection_status():
         selected = listbox.curselection()
@@ -221,15 +217,51 @@ def create_gui():
             last_status[selected_ip] = "UNKNOWN"
             update_listbox_with_status(last_status)
             save_connections(connections)
+        else:
+            messagebox.showwarning("Attenzione", "Nessuna connessione selezionata!")
 
     def change_selected_connection():
         selected = listbox.curselection()
         if selected:
             index = selected[0]
-            global editing_index
-            editing_index = index
-            name_entry.insert(0, connections[index]["name"])
-            ip_entry.insert(0, connections[index]["ip"])
+            conn = connections[index]
+
+            # Crea una finestra modale per modificare i dati
+            edit_window = tk.Toplevel(root)
+            edit_window.title("Modifica Connessione")
+            edit_window.geometry("420x160")
+            edit_window.transient(root)  # Imposta la finestra come figlia della finestra principale
+            edit_window.grab_set()  # Blocca l'interazione con la finestra principale
+
+            # Campi di input
+            tk.Label(edit_window, text="Nome").grid(row=0, column=0, padx=10, pady=(20,10))
+            name_entry = tk.Entry(edit_window, width=50)
+            name_entry.insert(0, conn["name"])  # Prepopola con il valore corrente
+            name_entry.grid(row=0, column=1, padx=10, pady=(20,10))
+
+            tk.Label(edit_window, text="Indirizzo IP").grid(row=1, column=0, padx=10, pady=10)
+            ip_entry = tk.Entry(edit_window, width=50)
+            ip_entry.insert(0, conn["ip"])  # Prepopola con il valore corrente
+            ip_entry.grid(row=1, column=1, padx=10, pady=10)
+
+            # Funzione per salvare i cambiamenti
+            def confirm_edit():
+                new_name = name_entry.get()
+                new_ip = ip_entry.get()
+                if new_name and new_ip:
+                    connections[index]["name"] = new_name
+                    connections[index]["ip"] = new_ip
+                    save_connections(connections)
+                    update_listbox_with_status(last_status)
+                    edit_window.destroy()  # Chiudi la finestra
+                else:
+                    messagebox.showwarning("Attenzione", "Entrambi i campi devono essere compilati!")
+
+            # Bottoni
+            tk.Button(edit_window, text="Conferma", command=confirm_edit).grid(row=2, column=0, padx=10, pady=20)
+            tk.Button(edit_window, text="Annulla", command=edit_window.destroy).grid(row=2, column=1, padx=10, pady=20)
+        else:
+            messagebox.showwarning("Attenzione", "Nessuna connessione selezionata!")
 
     root = tk.Tk()
     root.title("Gestore Connessioni")
