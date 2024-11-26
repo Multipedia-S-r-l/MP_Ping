@@ -4,6 +4,7 @@ import threading
 import time
 import smtplib
 import portalocker
+import ipaddress
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from ping3 import ping
@@ -201,19 +202,29 @@ def update_listbox_with_status(last_status):
 
     update_status_totals(last_status)
 
+def is_valid_ip(ip):
+    try:
+        ipaddress.ip_address(ip)
+        return True
+    except ValueError:
+        return False
+
 # Creazione dell'interfaccia GUI
 def create_gui():
     def add_connection_gui():
         name = name_entry.get()
         ip = ip_entry.get()
-        if name and ip:
-            add_connection(name, ip)
-            listbox.insert(tk.END, f"🔝 ❓ {name} | {ip}")
-            name_entry.delete(0, tk.END)
-            ip_entry.delete(0, tk.END)
-            update_status_totals({})
-        else:
-            messagebox.showwarning("Attenzione", "Inserisci un nome e un IP validi.")
+        if not name or not ip:
+            messagebox.showwarning("Attenzione", "Inserisci un nome e un indirizzo IP!")
+            return
+        if not is_valid_ip(ip):
+            messagebox.showwarning("Attenzione", "Inserisci un indirizzo IP valido!")
+            return
+        add_connection(name, ip)
+        listbox.insert(tk.END, f"🔝 ❓ {name} | {ip}")
+        name_entry.delete(0, tk.END)
+        ip_entry.delete(0, tk.END)
+        update_status_totals({})
 
     def remove_selected_connection():
         selected = listbox.curselection()
@@ -265,14 +276,17 @@ def create_gui():
             def confirm_edit():
                 new_name = name_entry.get()
                 new_ip = ip_entry.get()
-                if new_name and new_ip:
-                    connections[index]["name"] = new_name
-                    connections[index]["ip"] = new_ip
-                    save_connections(connections)
-                    update_listbox_with_status(last_status)
-                    edit_window.destroy()  # Chiudi la finestra
-                else:
-                    messagebox.showwarning("Attenzione", "Entrambi i campi devono essere compilati!")
+                if not new_name or not new_ip:
+                    messagebox.showwarning("Attenzione", "Inserisci un nome e un indirizzo IP!")
+                    return
+                if not is_valid_ip(new_ip):
+                    messagebox.showwarning("Attenzione", "Inserisci un indirizzo IP valido!")
+                    return
+                connections[index]["name"] = new_name
+                connections[index]["ip"] = new_ip
+                save_connections(connections)
+                update_listbox_with_status(last_status)
+                edit_window.destroy()  # Chiudi la finestra
 
             # Bottoni
             tk.Button(edit_window, text="Conferma", command=confirm_edit).grid(row=2, column=0, padx=10, pady=20)
