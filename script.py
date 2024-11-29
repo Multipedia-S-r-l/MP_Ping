@@ -147,13 +147,16 @@ def ping_connection(conn, last_status, total_connections, update_label, retries=
             down_times[ip] = datetime.now()
             print(f"{down_times[ip].strftime("%H:%M:%S")} \tIP: {ip} | Last: {last_status[ip]} | Current: {current_status}")
             send_email_alert(name, ip, current_status, f"Connessione DOWN alle {down_times[ip].strftime("%H:%M:%S")}")
-        elif current_status == "UP" and ip in down_times:
-            # Calcola il tempo di "DOWN" e invia l'email con la durata
-            down_duration = datetime.now() - down_times[ip]
-            down_minutes = int(down_duration.total_seconds() / 60)
-            down_seconds = int(down_duration.total_seconds() % 60)
+        elif current_status == "UP":
+            down_minutes = "?"
+            down_seconds = "?"
+            if ip in down_times:
+                # Calcola il tempo di "DOWN" e invia l'email con la durata
+                down_duration = datetime.now() - down_times[ip]
+                down_minutes = int(down_duration.total_seconds() / 60)
+                down_seconds = int(down_duration.total_seconds() % 60)
+                del down_times[ip]  # Rimuovi il record di "DOWN" dopo aver notificato
             send_email_alert(name, ip, current_status, f"Tempo di DOWN: {down_minutes} minuti e {down_seconds} secondi")
-            del down_times[ip]  # Rimuovi il record di "DOWN" dopo aver notificato
 
     with lock:
         last_status[ip] = current_status
