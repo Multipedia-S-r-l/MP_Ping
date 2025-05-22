@@ -5,6 +5,7 @@ import time
 import smtplib
 import portalocker
 import ipaddress
+import public_ip
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from ping3 import ping
@@ -20,6 +21,13 @@ update_interval = 15 * 60  # 15 minuti in secondi
 completed_pings = 0  # Contatore globale per tenere traccia dei ping completati
 lock = threading.Lock()  # Blocco per evitare condizioni di race quando si modifica il contatore
 down_times = {}
+
+def get_public_ip():
+    try:
+        return public_ip.get()
+    except Exception as e:
+        messagebox.showerror(f"Errore durante il recupero dell'IP pubblico: {e}")
+        return None
 
 def load_connections():
     try:
@@ -102,9 +110,11 @@ def monitor_ips(status_label, update_label):
     while monitoring:
         completed_pings = 0  # Resetta il contatore all'inizio di ogni ciclo di monitoraggio
         total_connections = len(connections)  # Numero totale di connessioni
+        public_ip = get_public_ip()
+        print(f"IP pubblico: {public_ip}")
 
         for conn in connections:
-            Thread(target=ping_connection, args=(conn, last_status, total_connections, update_label)).start()
+            Thread(target=ping_connection, args=(conn, last_status, total_connections, update_label, public_ip)).start()
 
         for i in range(update_interval, 0, -1):
             if not monitoring:
@@ -114,13 +124,13 @@ def monitor_ips(status_label, update_label):
             status_label.update()
             time.sleep(1)
 
-def ping_connection(conn, last_status, total_connections, update_label, retries=10):
+def ping_connection(conn, last_status, total_connections, update_label, public_ip, retries=10):
     global completed_pings
     ip = conn["ip"]
     name = conn["name"]
 
     # Salta il ping se la connessione è disabilitata
-    if not conn.get("enabled", True):
+    if not conn.get("enabled", True) or ip == public_ip:
         last_status[conn["ip"]] = "UNKNOWN"
         with lock:
             completed_pings += 1
