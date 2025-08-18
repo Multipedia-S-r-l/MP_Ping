@@ -1,0 +1,4 @@
+ping3
+portalocker
+click
+python-dotenv 
