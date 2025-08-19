@@ -24,6 +24,8 @@ def _get_status_icon(status):
         return '🟢'
     elif status == 'DOWN':
         return '🔴'
+    elif status == 'CHECKING':
+        return '🟡'
     elif status == 'UNKNOWN':
         return '❓'
     else:
