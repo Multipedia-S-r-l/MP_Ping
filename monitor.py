@@ -8,52 +8,114 @@ from ping3 import ping
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from threading import Lock, Event
-
-
-def _atomic_write_json(path: str, data):
-    tmp = path + '.tmp'
-    with open(tmp, 'w') as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, path)
-
-
-def _read_json_with_lock(path, lock_mode='r'):
-    """Legge un JSON con portalocker (shared lock). Restituisce None se non esiste o errore."""
-    if not os.path.exists(path):
-        return None
-    try:
-        with open(path, lock_mode) as f:
-            # lock shared per lettura
-            portalocker.lock(f, portalocker.LOCK_SH)
-            try:
-                data = json.load(f)
-            finally:
-                portalocker.unlock(f)
-        return data
-    except Exception:
-        return None
+from threading import Lock, Event, Thread
 
 class Monitor:
     def __init__(self, config_path=None, status_path=None, interval=None):
         self.config_path = config_path or os.environ.get('MP_PING_CONFIG', '/opt/mp_ping/connections.json')
         self.status_path = status_path or os.environ.get('MP_STATUS_FILE', '/opt/mp_ping/status.json')
         self.interval = interval or int(os.environ.get('MP_PING_INTERVAL', 900))
+
+        # parametri retry per conferma DOWN
+        self.retries = int(os.environ.get('MP_PING_RETRIES', 10))
+        self.retry_interval = int(os.environ.get('MP_PING_RETRY_INTERVAL', 30))
+
         self.lock = Lock()
         self.connections = self.load_connections()
-        # prova a inizializzare lo stato precedente da uno snapshot persistito
-        snapshot = _read_json_with_lock(self.status_path) or {}
+        # carica stato iniziale da snapshot se presente
+        snapshot = self._read_json_with_lock(self.status_path) or {}
         last = snapshot.get('last_status') if isinstance(snapshot, dict) else None
         if isinstance(last, dict):
             self.last_status = {conn['ip']: last.get(conn['ip']) for conn in self.connections}
         else:
             self.last_status = {conn['ip']: None for conn in self.connections}
+        
         self.down_times = {}
         self.logger = self.setup_logger()
+
+        # controllo del loop e struttura per retry threads
         self.running = Event()
         self.running.set()
+        self.retry_threads = {}     # ip -> Thread
+        self.retry_lock = Lock()    # protegge retry_threads
+
+
+    def _atomic_write_json(path: str, data):
+        tmp = path + '.tmp'
+        with open(tmp, 'w') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+
+
+    def _read_json_with_lock(path, lock_mode='r'):
+        """Legge un JSON con portalocker (shared lock). Restituisce None se non esiste o errore."""
+        if not os.path.exists(path):
+            return None
+        try:
+            with open(path, lock_mode) as f:
+                # lock shared per lettura
+                portalocker.lock(f, portalocker.LOCK_SH)
+                try:
+                    data = json.load(f)
+                finally:
+                    portalocker.unlock(f)
+            return data
+        except Exception:
+            return None
+        
+
+    def _confirm_down_worker(self, name, ip):
+        """Worker che esegue self.retries tentativi a intervalli self.retry_interval.
+        Se uno dei tentativi torna UP, si cancella la conferma e si riporta lo stato a UP.
+        Se tutti falliscono, si invia la mail di DOWN e si imposta lo stato a DOWN.
+        """
+        try:
+            for attempt in range(self.retries):
+                # aspetta il retry interval
+                time.sleep(self.retry_interval)
+
+                try:
+                    resp = ping(ip, timeout=2)
+                except Exception as e:
+                    self.logger.debug(f"Errore ping in confirm worker per {ip}: {e}")
+                    resp = None
+
+                if resp:
+                    # recovered during confirmation
+                    with self.lock:
+                        self.last_status[ip] = 'UP'
+                    self.logger.info(f"{name} ({ip}) recuperato durante conferma (attempt {attempt+1}). Nessuna email DOWN inviata.")
+                    # rimuovi eventuale down_time se impostato
+                    if ip in self.down_times:
+                        del self.down_times[ip]
+                    break
+                else:
+                    self.logger.debug(f"Confirm attempt {attempt+1}/{self.retries} per {ip} ancora DOWN.")
+
+            else:
+                # eseguito se il loop non ha fatto break: tutti i tentativi falliti -> conferma DOWN
+                with self.lock:
+                    self.last_status[ip] = 'DOWN'
+                # registra down start time
+                self.down_times[ip] = datetime.now()
+                # invia email DOWN
+                self.logger.info(f"{name} ({ip}) DOWN confermato dopo {self.retries} tentativi.")
+                try:
+                    text = f"Connessione confermata DOWN dopo {self.retries} tentativi."
+                    text += f"\nConnessione DOWN alle {self.down_times[ip].strftime('%H:%M:%S')}"
+                    self.send_email_alert(name, ip, 'DOWN', text)
+                except Exception as e:
+                    self.logger.error(f"Errore invio email DOWN per {ip}: {e}")
+
+        finally:
+            # cleanup: rimuovi il thread dalla mappa
+            with self.retry_lock:
+                try:
+                    del self.retry_threads[ip]
+                except KeyError:
+                    pass
 
 
     def setup_logger(self):
@@ -140,8 +202,8 @@ class Monitor:
         Il filtro (filter_keyword) cerca case-insensitive su name e substring su ip.
         """
         # leggi config e status usando i path corretti (self.config_path e self.status_path)
-        conns = _read_json_with_lock(self.config_path) or []
-        status_snapshot = _read_json_with_lock(self.status_path) or {}
+        conns = self._read_json_with_lock(self.config_path) or []
+        status_snapshot = self._read_json_with_lock(self.status_path) or {}
         last = status_snapshot.get('last_status', {}) if isinstance(status_snapshot, dict) else {}
 
         def matches(c):
@@ -170,26 +232,42 @@ class Monitor:
 
 
     def ping_all(self):
+        """
+        Esegue un ping su tutte le connessioni configurate.
+        Quando viene rilevato un primo DOWN, non invia subito la mail: entra in fase di CHECKING
+        e lancia un worker che esegue self.retries tentativi distanziati di self.retry_interval secondi.
+        Solo se tutti i tentativi falliscono viene inviata la mail di DOWN.
+        """
         results = []
         for conn in self.connections:
             if not conn.get('enabled', True):
-                self.last_status[conn['ip']] = 'UNKNOWN'
+                # connessioni in pausa non riportano stato
+                with self.lock:
+                    self.last_status[conn['ip']] = 'UNKNOWN'
                 continue
+
             ip = conn['ip']
             name = conn['name']
-            response = ping(ip, timeout=2)
-            current_status = 'UP' if response else 'DOWN'
-            prev_status = self.last_status.get(ip)
-            # gestione transizioni e first-sample
-            if prev_status is None:
-                # primo campionamento dopo avvio: se è DOWN, registra l'inizio del down
-                if current_status == 'DOWN' and ip not in self.down_times:
-                    self.down_times[ip] = datetime.now()
-            elif prev_status != current_status:
-                if current_status == 'DOWN':
-                    self.down_times[ip] = datetime.now()
-                    self.send_email_alert(name, ip, current_status, f"Connessione DOWN alle {self.down_times[ip].strftime('%H:%M:%S')}")
-                elif current_status == 'UP':
+
+            try:
+                response = ping(ip, timeout=2)
+            except Exception as e:
+                # in caso di eccezione ping3, trattiamo come failure
+                self.logger.debug(f'Errore ping {ip}: {e}')
+                response = None
+
+            # stato rilevato in questo ciclo
+            observed = 'UP' if response else 'DOWN'
+
+            with self.lock:
+                prev_status = self.last_status.get(ip)
+
+            # Se osservato UP
+            if observed == 'UP':
+                # se prima era DOWN (o UNKNOWN), invia UP immediatamente (se è una transizione DOWN->UP)
+                # manteniamo comportamento precedente: invia notifica UP al passaggio da DOWN->UP
+                if prev_status == 'DOWN':
+                    # calcola durata DOWN se presente
                     extra = ""
                     if ip in self.down_times:
                         down_duration = datetime.now() - self.down_times[ip]
@@ -197,12 +275,64 @@ class Monitor:
                         seconds = int(down_duration.total_seconds() % 60)
                         extra = f"Tempo di DOWN: {minutes} minuti e {seconds} secondi"
                         del self.down_times[ip]
-                    # invia comunque la notifica UP anche se non conosciamo la durata
-                    self.send_email_alert(name, ip, current_status, extra)
-            self.last_status[ip] = current_status
+                    # setta stato
+                    with self.lock:
+                        self.last_status[ip] = 'UP'
+                    # invia notifica UP
+                    try:
+                        self.send_email_alert(name, ip, 'UP', extra)
+                    except Exception as e:
+                        self.logger.error(f"Errore invio email UP per {ip}: {e}")
+                else:
+                    # semplicemente aggiorna a UP
+                    with self.lock:
+                        self.last_status[ip] = 'UP'
+                # se esiste un worker di conferma in corso, segnaliamo che è recuperato
+                with self.retry_lock:
+                    if ip in self.retry_threads:
+                        # lasciamo che il worker termini al prossimo controllo (worker verifica last_status)
+                        # oppure possiamo rimuovere subito la traccia così non verrà duplicato un nuovo worker
+                        # (ma lasciamo il worker leggere last_status e terminare)
+                        pass
+
+            # Se osservato DOWN
+            else:
+                # se precedente stato era DOWN -> è già DOWN, mantieni stato e (se non è stata inviata mail, probabilmente l'abbiamo già inviata)
+                if prev_status == 'DOWN':
+                    with self.lock:
+                        self.last_status[ip] = 'DOWN'
+                # se precedente era CHECKING (già in conferma) -> mantieni CHECKING (o DOWN se già confermato)
+                elif prev_status == 'CHECKING':
+                    # mantieni lo stato (il worker deciderà)
+                    with self.lock:
+                        self.last_status[ip] = 'CHECKING'
+                else:
+                    # prima era UP o UNKNOWN: avvia la conferma DOWN
+                    with self.lock:
+                        self.last_status[ip] = 'CHECKING'
+                    self.logger.info(f"Prima rilevazione DOWN per {name} ({ip}) — avviata procedura di conferma ({self.retries} tentativi ogni {self.retry_interval}s)")
+                    self.schedule_confirm_down(name, ip)
+
+            # log e raccolta risultati
+            with self.lock:
+                current_status = self.last_status.get(ip, 'UNKNOWN')
             results.append({'name': name, 'ip': ip, 'status': current_status})
             self.logger.info(f'{name} ({ip}) {current_status}')
         return results
+
+
+    def schedule_confirm_down(self, name, ip):
+        """Avvia in background un worker che esegue i tentativi di conferma per l'IP.
+        Evita di lanciare più worker contemporanei per lo stesso IP.
+        """
+        with self.retry_lock:
+            if ip in self.retry_threads:
+                # già in corso
+                self.logger.debug(f"Retry già in corso per {ip}, skip schedule.")
+                return
+            thread = Thread(target=self._confirm_down_worker, args=(name, ip), daemon=True)
+            self.retry_threads[ip] = thread
+            thread.start()
 
 
     def send_email_alert(self, name, ip, status, text=""):
@@ -246,7 +376,7 @@ class Monitor:
             # usa locking per evitare race con altri processi che leggono
             # notare: portalocker su write non è strettamente necessario qui se usiamo replace atomico,
             # ma lo usiamo solo per coerenza se altri leggono con portalocker.
-            _atomic_write_json(self.status_path, export)
+            self._atomic_write_json(self.status_path, export)
         except Exception as e:
             # logga ma non fallire il ciclo
             self.logger.error(f"Errore dump_status: {e}")

@@ -1,0 +1,277 @@
+[
+    {
+        "name": "EOLO - A J Walter Aviation Limited\n - WOB351295602\n",
+        "ip": "88.147.126.169",
+        "enabled": false
+    },
+    {
+        "name": "EOLO - Banfi Pierangelo - WOB301325539",
+        "ip": "84.33.120.165",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - BB Farma S.r.l. - W56377244482",
+        "ip": "81.174.6.201",
+        "enabled": false
+    },
+    {
+        "name": "EOLO [Backup] - C&C Fashion Srl - W12692594838",
+        "ip": "78.134.9.40",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Centrufficio Sistemi S.r.l. - WW6712777473",
+        "ip": "81.174.11.205",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Circolo di Tornavento - W55576673528",
+        "ip": "88.147.15.96",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Comune di Saltrio - WOA572765626",
+        "ip": "5.157.97.69",
+        "enabled": true
+    },
+    {
+        "name": "EOLO [Backup] - De Lorenzis S.r.l. - WOB241113960",
+        "ip": "84.33.117.180",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Econord Spa - W38372332268",
+        "ip": "100.122.120.32",
+        "enabled": false
+    },
+    {
+        "name": "EOLO [Backup] - Encos S.r.l. - W14803648464",
+        "ip": "88.149.155.191",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - ENI Fotovoltaico (Mondialpol Trecate) - WOB861776447",
+        "ip": "84.33.106.33",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Galvanica Cedratese S.r.l. - WOA454876907",
+        "ip": "88.147.31.105",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - IC B. Luini - W13892098235",
+        "ip": "128.116.136.187",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - IC Montessori - WOB661411905",
+        "ip": "128.116.182.127",
+        "enabled": false
+    },
+    {
+        "name": "EOLO - IC Vidoletti (Varese 3) - W10460445486",
+        "ip": "5.157.115.21",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - IISS G. Torno - W15144879777",
+        "ip": "81.174.8.97",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Indet Srl - WOA742997053",
+        "ip": "78.134.74.92",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - JK Fitness S.r.l. - WOB971434705",
+        "ip": "77.32.71.242",
+        "enabled": true
+    },
+    {
+        "name": "EOLO [Backup] - Kendeil S.r.l. - W21164894728",
+        "ip": "78.134.9.151",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Lamikos S.r.l. - WOB231028619",
+        "ip": "84.33.100.88",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - M.T.I. di Laita A. & C. S.r.l. - WW7856787475",
+        "ip": "88.149.180.124",
+        "enabled": false
+    },
+    {
+        "name": "EOLO - Multipedia S.r.l. - W14429378548",
+        "ip": "212.124.177.127",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Museo MAGA - WOA539976140",
+        "ip": "88.149.205.89",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - NASAV S.r.l. - WOB571550388",
+        "ip": "88.149.223.217",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Nearchimica S.p.A. - WW7232787475",
+        "ip": "88.147.16.207",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - New Math S.r.l. - WOB271261594",
+        "ip": "128.116.185.92",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - NEXTO S.r.l. Pelletti - WOA950795305\n",
+        "ip": "78.134.97.55",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Orlandi Sergio (Burgfrau) - W21689955926",
+        "ip": "77.32.95.187",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Parco Lombardo del Ticino (Lonate Pozzolo) - WOB031366515",
+        "ip": "128.116.131.222",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Parco Lombardo del Ticino (Tornavento) - WOA475907400",
+        "ip": "81.174.23.172",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Penta S.r.l. - WOB781856611",
+        "ip": "78.134.35.137",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Polichem S.r.l. - WOB591157321",
+        "ip": "84.33.93.17",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Ponti & Frigerio S.r.l. - W14574362373",
+        "ip": "88.149.183.182",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Pro-Systems S.p.A. - W21716477637",
+        "ip": "88.149.178.98",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - SAFE S.c.a.r.l - W19363926372",
+        "ip": "5.157.96.129",
+        "enabled": false
+    },
+    {
+        "name": "EOLO - SBB Cargo Italia S.r.l. (Domodossola) - WOA513962219",
+        "ip": "81.174.23.73",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - SBB Cargo Italia S.r.l. (Gallarate Hupac) - WW6548777473",
+        "ip": "5.157.124.152",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - SBB Cargo Italia S.r.l. (Milano) - WOA566862000",
+        "ip": "78.134.99.70",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Scuola Primaria Cassi (Saltrio) - WOA851949906",
+        "ip": "88.149.164.79",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - SI.S.TEL. Data S.r.l. - WOA048750662",
+        "ip": "78.134.90.89",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - SIMAR S.r.l. - WOB661957323",
+        "ip": "77.32.89.233",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Sistemi Industriali S.p.A. - WOB051478520",
+        "ip": "77.32.95.141",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Vedetta 2 Mondialpol S.p.A. (Bergamo) - WOA011938845",
+        "ip": "88.147.14.111",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Vedetta 2 Mondialpol S.p.A. (Cavallasca) - W23232653473",
+        "ip": "88.147.124.203",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Vedetta 2 Mondialpol S.p.A. (Cavallirio) - WOA351880467",
+        "ip": "88.147.95.66",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Vedetta 2 Mondialpol S.p.A. (Collegno) - W23404266853",
+        "ip": "88.147.124.124",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Vedetta 2 Mondialpol S.p.A. (Como) - W23132683993",
+        "ip": "88.147.125.220",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Vedetta 2 Mondialpol S.p.A. (Cuneo) - WOB341239569",
+        "ip": "128.116.156.204",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Vedetta 2 Mondialpol S.p.A. (Gattico) - WOA342976383",
+        "ip": "84.33.90.224",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Vedetta 2 Mondialpol S.p.A. (Jesi) - WOB211241622",
+        "ip": "128.116.184.223",
+        "enabled": true
+    },
+    {
+        "name": "Idia Italia Srl - VODAFONE CLIENTE",
+        "ip": "109.115.144.95",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Volandia Officine Caproni S.r.l. (Museo + Bistrot) - WOB551581975",
+        "ip": "77.32.107.247",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Volandia Uffici - WOB451128621",
+        "ip": "84.33.91.183",
+        "enabled": true
+    },
+    {
+        "name": "EOLO - Werden S.r.l. - WOB092150080",
+        "ip": "78.134.39.41",
+        "enabled": false
+    },
+    {
+        "name": "EOLO - Zanzottera Massimiliano - W25236178675",
+        "ip": "81.174.1.153",
+        "enabled": true
+    }
+]
