@@ -43,7 +43,13 @@ class Monitor:
         self.interval = interval or int(os.environ.get('MP_PING_INTERVAL', 900))
         self.lock = Lock()
         self.connections = self.load_connections()
-        self.last_status = {conn['ip']: None for conn in self.connections}
+        # prova a inizializzare lo stato precedente da uno snapshot persistito
+        snapshot = _read_json_with_lock(self.status_path) or {}
+        last = snapshot.get('last_status') if isinstance(snapshot, dict) else None
+        if isinstance(last, dict):
+            self.last_status = {conn['ip']: last.get(conn['ip']) for conn in self.connections}
+        else:
+            self.last_status = {conn['ip']: None for conn in self.connections}
         self.down_times = {}
         self.logger = self.setup_logger()
         self.running = Event()
@@ -174,16 +180,25 @@ class Monitor:
             response = ping(ip, timeout=2)
             current_status = 'UP' if response else 'DOWN'
             prev_status = self.last_status.get(ip)
-            if prev_status is not None and prev_status != current_status:
+            # gestione transizioni e first-sample
+            if prev_status is None:
+                # primo campionamento dopo avvio: se è DOWN, registra l'inizio del down
+                if current_status == 'DOWN' and ip not in self.down_times:
+                    self.down_times[ip] = datetime.now()
+            elif prev_status != current_status:
                 if current_status == 'DOWN':
                     self.down_times[ip] = datetime.now()
                     self.send_email_alert(name, ip, current_status, f"Connessione DOWN alle {self.down_times[ip].strftime('%H:%M:%S')}")
-                elif current_status == 'UP' and ip in self.down_times:
-                    down_duration = datetime.now() - self.down_times[ip]
-                    minutes = int(down_duration.total_seconds() / 60)
-                    seconds = int(down_duration.total_seconds() % 60)
-                    self.send_email_alert(name, ip, current_status, f"Tempo di DOWN: {minutes} minuti e {seconds} secondi")
-                    del self.down_times[ip]
+                elif current_status == 'UP':
+                    extra = ""
+                    if ip in self.down_times:
+                        down_duration = datetime.now() - self.down_times[ip]
+                        minutes = int(down_duration.total_seconds() / 60)
+                        seconds = int(down_duration.total_seconds() % 60)
+                        extra = f"Tempo di DOWN: {minutes} minuti e {seconds} secondi"
+                        del self.down_times[ip]
+                    # invia comunque la notifica UP anche se non conosciamo la durata
+                    self.send_email_alert(name, ip, current_status, extra)
             self.last_status[ip] = current_status
             results.append({'name': name, 'ip': ip, 'status': current_status})
             self.logger.info(f'{name} ({ip}) {current_status}')
