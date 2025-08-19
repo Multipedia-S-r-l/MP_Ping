@@ -40,7 +40,7 @@ class Monitor:
         self.retry_lock = Lock()    # protegge retry_threads
 
 
-    def _atomic_write_json(path: str, data):
+    def _atomic_write_json(self, path: str, data):
         tmp = path + '.tmp'
         with open(tmp, 'w') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
@@ -49,7 +49,7 @@ class Monitor:
         os.replace(tmp, path)
 
 
-    def _read_json_with_lock(path, lock_mode='r'):
+    def _read_json_with_lock(self, path, lock_mode='r'):
         """Legge un JSON con portalocker (shared lock). Restituisce None se non esiste o errore."""
         if not os.path.exists(path):
             return None
