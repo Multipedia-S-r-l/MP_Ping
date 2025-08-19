@@ -9,14 +9,14 @@ import os
 
 def _read_status_file(status_path):
     if not os.path.exists(status_path):
-        print(f"Status file non trovato: {status_path}")
+        click.echo(f"Status file non trovato: {status_path}")
         return None
     try:
         with open(status_path, 'r') as f:
             data = json.load(f)
         return data
     except Exception as e:
-        print(f"Errore leggendo {status_path}: {e}")
+        click.echo(f"Errore leggendo {status_path}: {e}")
         return None
 
 def _get_status_icon(status):
@@ -70,14 +70,20 @@ def status():
     monitor = Monitor()
     data = _read_status_file(monitor.status_path)
     if not data:
-        print("Nessun dato di stato disponibile.")
+        click.echo("Nessun dato di stato disponibile.")
         return
     ts = data.get('timestamp')
     last = data.get('last_status', {})
-    print(f"Status snapshot: {ts}")
+    click.echo(f"\n\nStatus snapshot: {ts}\n")
     for ip, st in last.items():
         status_icon = _get_status_icon(st)
-        print(f"{status_icon} {ip:<15}\t{st}")
+        click.echo(f"{status_icon} {ip:<15}\t{st}")
+    # conteggi
+    up_count = sum(1 for st in last.values() if st == 'UP')
+    down_count = sum(1 for st in last.values() if st == 'DOWN')
+    # connessioni in pausa lette dalla configurazione
+    paused_count = sum(1 for c in monitor.connections if not c.get('enabled', True))
+    click.echo(f"\nTotali: UP={up_count} | DOWN={down_count} | Pausa={paused_count}\n")
 
 @cli.group()
 def conn():
@@ -128,11 +134,17 @@ def list(filter_keyword):
     max_name = max((len(c['name']) for c in conns), default=20)
     max_ip = max((len(c['ip']) for c in conns), default=15)
 
+    click.echo("\n")
     for c in conns:
         enabled_icon = '▶️' if c['enabled'] else '⏸️'
         st = c['status']
         status_icon = _get_status_icon(st)
         click.echo(f"{enabled_icon} {status_icon} {c['name']:<{max_name}} | {c['ip']:<{max_ip}} | {st}")
-
+    # conteggi
+    up_count = sum(1 for c in conns if c['status'] == 'UP')
+    down_count = sum(1 for c in conns if c['status'] == 'DOWN')
+    paused_count = sum(1 for c in conns if not c.get('enabled', True))
+    click.echo(f"\nTotali: UP={up_count} | DOWN={down_count} | Pausa={paused_count}\n")
+    
 if __name__ == '__main__':
     cli() 

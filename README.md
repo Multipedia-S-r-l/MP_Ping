@@ -15,3 +15,16 @@
 - `conn pause`: mette in pausa una connessione con parametro `--name`
 - `conn resume`: riprende il monitoraggio della connessione con parametro `--name`
 - `conn list`: elenca tutte le connessioni monitorate. Parametro opzionale `--filter` per avere keyword su name o ip
+
+## Configurazioni del progetto
+### Percorso base
+`/opt/mp_ping`
+
+### Variabili ambiente
+`/etc/default/mp_ping`
+
+### Comandi per il servizio linux
+- `systemctl daemon-reload`: aggiornamento di tutti i servizi systemd (se modifico il file systemd)
+- `systemctl restart mp_ping`: riavvio del servizio systemd (se vengono modificati i file)
+- `systemctl status mp_ping -l`: status relativo al servizio systemd
+- `journalctl -u mp_ping -f`: Log in real-time
