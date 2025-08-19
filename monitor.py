@@ -127,12 +127,6 @@ class Monitor:
         self.save_connections()
 
 
-    def list_connections(self, filter_keyword=None):
-        if not filter_keyword:
-            return self.connections
-        return [c for c in self.connections if filter_keyword.lower() in c['name'].lower() or filter_keyword in c['ip']]
-
-
     def list_connections_with_status(self, filter_keyword=None):
         """
         Restituisce una lista di dict delle connessioni con campo 'status' unito dallo snapshot.
