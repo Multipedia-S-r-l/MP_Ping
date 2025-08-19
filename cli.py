@@ -4,6 +4,30 @@ import click
 import signal
 import sys
 from monitor import Monitor
+import json
+import os
+
+def _read_status_file(status_path):
+    if not os.path.exists(status_path):
+        print(f"Status file non trovato: {status_path}")
+        return None
+    try:
+        with open(status_path, 'r') as f:
+            data = json.load(f)
+        return data
+    except Exception as e:
+        print(f"Errore leggendo {status_path}: {e}")
+        return None
+
+def _get_status_icon(status):
+    if status == 'UP':
+        return '🟢'
+    elif status == 'DOWN':
+        return '🔴'
+    elif status == 'UNKNOWN':
+        return '❓'
+    else:
+        return '❔'
 
 @click.group()
 def cli():
@@ -21,9 +45,19 @@ def start(config, interval):
     """Avvia il monitor come daemon."""
     monitor = Monitor(config_path=config, interval=interval)
     def handle_sigterm(signum, frame):
-        click.echo('Ricevuto SIGTERM, uscita...')
-        sys.exit(0)
+        click.echo('Ricevuto SIGTERM, arresto monitor...')
+        try:
+            monitor.stop()
+        except Exception:
+            pass
+    def handle_sigint(signum, frame):
+        click.echo('Ricevuto SIGINT, arresto monitor...')
+        try:
+            monitor.stop()
+        except Exception:
+            pass
     signal.signal(signal.SIGTERM, handle_sigterm)
+    signal.signal(signal.SIGINT, handle_sigint)
     click.echo('Monitor avviato. Premi Ctrl+C per uscire.')
     try:
         monitor.run_monitor_loop()
@@ -34,9 +68,16 @@ def start(config, interval):
 def status():
     """Mostra lo stato corrente delle connessioni."""
     monitor = Monitor()
-    status = monitor.status()
-    for ip, st in status.items():
-        click.echo(f'{ip}: {st}')
+    data = _read_status_file(monitor.status_path)
+    if not data:
+        print("Nessun dato di stato disponibile.")
+        return
+    ts = data.get('timestamp')
+    last = data.get('last_status', {})
+    print(f"Status snapshot: {ts}")
+    for ip, st in last.items():
+        status_icon = _get_status_icon(st)
+        print(f"{status_icon} {ip:<15}\t{st}")
 
 @cli.group()
 def conn():
@@ -76,11 +117,22 @@ def resume(name):
 @conn.command()
 @click.option('--filter', 'filter_keyword', default=None, help='Filtro per nome o IP')
 def list(filter_keyword):
+    """Lista connessioni con stato (usa snapshot scritto dal daemon)."""
     monitor = Monitor()
-    conns = monitor.list_connections(filter_keyword)
+    conns = monitor.list_connections_with_status(filter_keyword)
+    if not conns:
+        click.echo("Nessuna connessione trovata (o status non disponibile).")
+        return
+
+    # stampa ordinata (name, ip, status) con padding semplice
+    max_name = max((len(c['name']) for c in conns), default=20)
+    max_ip = max((len(c['ip']) for c in conns), default=15)
+
     for c in conns:
-        status = monitor.last_status.get(c['ip'], 'UNKNOWN')
-        click.echo(f"{'🟢' if c.get('enabled', True) else '⏸️'} {c['name']} | {c['ip']} | {status}")
+        enabled_icon = '▶️' if c['enabled'] else '⏸️'
+        st = c['status']
+        status_icon = _get_status_icon(st)
+        click.echo(f"{enabled_icon} {status_icon} {c['name']:<{max_name}} | {c['ip']:<{max_ip}} | {st}")
 
 if __name__ == '__main__':
     cli() 

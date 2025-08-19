@@ -8,17 +8,47 @@ from ping3 import ping
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from threading import Lock
+from threading import Lock, Event
+
+
+def _atomic_write_json(path: str, data):
+    tmp = path + '.tmp'
+    with open(tmp, 'w') as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
+def _read_json_with_lock(path, lock_mode='r'):
+    """Legge un JSON con portalocker (shared lock). Restituisce None se non esiste o errore."""
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, lock_mode) as f:
+            # lock shared per lettura
+            portalocker.lock(f, portalocker.LOCK_SH)
+            try:
+                data = json.load(f)
+            finally:
+                portalocker.unlock(f)
+        return data
+    except Exception:
+        return None
 
 class Monitor:
-    def __init__(self, config_path=None, interval=None):
+    def __init__(self, config_path=None, status_path=None, interval=None):
         self.config_path = config_path or os.environ.get('MP_PING_CONFIG', '/opt/mp_ping/connections.json')
+        self.status_path = status_path or os.environ.get('MP_STATUS_FILE', '/opt/mp_ping/status.json')
         self.interval = interval or int(os.environ.get('MP_PING_INTERVAL', 900))
         self.lock = Lock()
         self.connections = self.load_connections()
         self.last_status = {conn['ip']: None for conn in self.connections}
         self.down_times = {}
         self.logger = self.setup_logger()
+        self.running = Event()
+        self.running.set()
+
 
     def setup_logger(self):
         logger = logging.getLogger('mp_ping')
@@ -44,6 +74,7 @@ class Monitor:
             logger.error(f'Impossibile aprire file di log {log_file}: {e}. Logging su stdout.')
         return logger
 
+
     def load_connections(self):
         if not os.path.exists(self.config_path):
             return []
@@ -52,6 +83,7 @@ class Monitor:
             data = json.load(f)
             portalocker.unlock(f)
         return data
+
 
     def save_connections(self):
         for _ in range(5):
@@ -66,10 +98,12 @@ class Monitor:
                 time.sleep(0.5)
         raise RuntimeError('Impossibile salvare le connessioni dopo 5 tentativi.')
 
+
     def add_connection(self, name, ip):
         self.connections.append({'name': name, 'ip': ip, 'enabled': True})
         self.save_connections()
         self.last_status[ip] = 'UNKNOWN'
+
 
     def remove_connection(self, name=None, ip=None):
         before = len(self.connections)
@@ -78,11 +112,13 @@ class Monitor:
         self.last_status = {c['ip']: self.last_status.get(c['ip'], 'UNKNOWN') for c in self.connections}
         return before - len(self.connections)
 
+
     def pause_connection(self, name):
         for c in self.connections:
             if c['name'] == name:
                 c['enabled'] = False
         self.save_connections()
+
 
     def resume_connection(self, name):
         for c in self.connections:
@@ -90,10 +126,48 @@ class Monitor:
                 c['enabled'] = True
         self.save_connections()
 
+
     def list_connections(self, filter_keyword=None):
         if not filter_keyword:
             return self.connections
         return [c for c in self.connections if filter_keyword.lower() in c['name'].lower() or filter_keyword in c['ip']]
+
+
+    def list_connections_with_status(self, filter_keyword=None):
+        """
+        Restituisce una lista di dict delle connessioni con campo 'status' unito dallo snapshot.
+        Ogni elemento: {'name':..., 'ip':..., 'enabled':..., 'status': ...}
+        Il filtro (filter_keyword) cerca case-insensitive su name e substring su ip.
+        """
+        # leggi config e status usando i path corretti (self.config_path e self.status_path)
+        conns = _read_json_with_lock(self.config_path) or []
+        status_snapshot = _read_json_with_lock(self.status_path) or {}
+        last = status_snapshot.get('last_status', {}) if isinstance(status_snapshot, dict) else {}
+
+        def matches(c):
+            if not filter_keyword:
+                return True
+            fk = filter_keyword.lower()
+            name = (c.get('name') or '').lower()
+            ip = c.get('ip') or ''
+            return fk in name or fk in ip
+
+        out = []
+        for c in conns:
+            if not matches(c):
+                continue
+            ip = c.get('ip', '')
+            s = last.get(ip)
+            status = s if s is not None else 'UNKNOWN'
+            out.append({
+                'name': c.get('name', '<no name>'),
+                'ip': ip,
+                'enabled': c.get('enabled', True),
+                'status': status,
+                'raw': c
+            })
+        return out
+
 
     def ping_all(self):
         results = []
@@ -121,6 +195,7 @@ class Monitor:
             self.logger.info(f'{name} ({ip}) {current_status}')
         return results
 
+
     def send_email_alert(self, name, ip, status, text=""):
         sender_email = os.environ.get('MP_PING_EMAIL')
         sender_password = os.environ.get('MP_PING_EMAIL_PASSWORD')
@@ -146,10 +221,45 @@ class Monitor:
         except Exception as e:
             self.logger.error(f'Errore invio email: {e}')
 
+
     def status(self):
         return self.last_status.copy()
 
+
+    def dump_status(self):
+        """Scrive lo stato corrente last_status su self.status_path (atomico)."""
+        try:
+            # costruisci struttura exportabile
+            export = {
+                'timestamp': datetime.utcnow().isoformat() + 'Z',
+                'last_status': self.last_status,  # dizionario ip -> stato
+            }
+            # usa locking per evitare race con altri processi che leggono
+            # notare: portalocker su write non è strettamente necessario qui se usiamo replace atomico,
+            # ma lo usiamo solo per coerenza se altri leggono con portalocker.
+            _atomic_write_json(self.status_path, export)
+        except Exception as e:
+            # logga ma non fallire il ciclo
+            self.logger.error(f"Errore dump_status: {e}")
+
+
+    def stop(self):
+        """Ferma il loop del monitor in modo pulito."""
+        try:
+            self.running.clear()
+            self.logger.info("Monitor stop requested.")
+        except Exception:
+            pass
+
+
+    # chiamare dump_status dopo ogni ciclo di ping, es.: in run_monitor_loop():
     def run_monitor_loop(self):
-        while True:
-            self.ping_all()
-            time.sleep(self.interval) 
+        while self.running.is_set():
+            # ricarica conf se implementato...
+            try:
+                self.ping_all()
+            except Exception as e:
+                self.logger.exception(f"Errore in ping_all: {e}")
+            # dopo il ciclo di ping scriviamo lo stato
+            self.dump_status()
+            time.sleep(self.interval)
