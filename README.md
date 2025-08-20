@@ -18,11 +18,11 @@
 
 ## Configurazioni del progetto
 ### Server INFO
-IP: 192.168.0.10
-Name: srv-linux
-Percorso base: `/opt/mp_ping`
-Variabili ambiente: `/etc/default/mp_ping`
-Comandi wrapper: `/usr/local/bin`
+- IP: 192.168.0.10
+- Name: srv-linux
+- Percorso base: `/opt/mp_ping`
+- Variabili ambiente: `/etc/default/mp_ping`
+- Comandi wrapper: `/usr/local/bin`
 
 ### Utenti
 - Andrea: andrea | A2025c
