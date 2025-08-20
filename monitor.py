@@ -270,12 +270,13 @@ class Monitor:
                 # manteniamo comportamento precedente: invia notifica UP al passaggio da DOWN->UP
                 if prev_status == 'DOWN':
                     # calcola durata DOWN se presente
-                    extra = ""
+                    up_time = datetime.now(self.local_tz)
+                    extra = f"Connessione UP alle {up_time.strftime('%H:%M:%S')}"
                     if ip in self.down_times:
                         down_duration = datetime.now(self.local_tz) - self.down_times[ip]
                         minutes = int(down_duration.total_seconds() / 60)
                         seconds = int(down_duration.total_seconds() % 60)
-                        extra = f"Tempo di DOWN: {minutes} minuti e {seconds} secondi"
+                        extra += f"\nTempo di DOWN: {minutes} minuti e {seconds} secondi"
                         del self.down_times[ip]
                     # setta stato
                     with self.lock:
