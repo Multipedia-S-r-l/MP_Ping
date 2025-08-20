@@ -83,9 +83,10 @@ def status():
     # conteggi
     up_count = sum(1 for st in last.values() if st == 'UP')
     down_count = sum(1 for st in last.values() if st == 'DOWN')
+    checking_count = sum(1 for st in last.values() if st == 'CHECKING')
     # connessioni in pausa lette dalla configurazione
     paused_count = sum(1 for c in monitor.connections if not c.get('enabled', True))
-    click.echo(f"\nTotali: UP={up_count} | DOWN={down_count} | Pausa={paused_count}\n")
+    click.echo(f"\nTotali: UP={up_count} | DOWN={down_count} | CHECKING={checking_count} | Pausa={paused_count}\n")
 
 @cli.group()
 def conn():
@@ -145,8 +146,9 @@ def list(filter_keyword):
     # conteggi
     up_count = sum(1 for c in conns if c['status'] == 'UP')
     down_count = sum(1 for c in conns if c['status'] == 'DOWN')
+    checking_count = sum(1 for c in conns if c['status'] == 'CHECKING')
     paused_count = sum(1 for c in conns if not c.get('enabled', True))
-    click.echo(f"\nTotali: UP={up_count} | DOWN={down_count} | Pausa={paused_count}\n")
+    click.echo(f"\nTotali: UP={up_count} | DOWN={down_count} | CHECKING={checking_count} | Pausa={paused_count}\n")
     
 if __name__ == '__main__':
     cli() 

@@ -4,6 +4,7 @@ import time
 import logging
 import portalocker
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from ping3 import ping
 import smtplib
 from email.mime.text import MIMEText
@@ -30,6 +31,7 @@ class Monitor:
         else:
             self.last_status = {conn['ip']: None for conn in self.connections}
         
+        self.local_tz = ZoneInfo('Europe/Rome')
         self.down_times = {}
         self.logger = self.setup_logger()
 
@@ -99,7 +101,7 @@ class Monitor:
                 with self.lock:
                     self.last_status[ip] = 'DOWN'
                 # registra down start time
-                self.down_times[ip] = datetime.now()
+                self.down_times[ip] = datetime.now(self.local_tz)
                 # invia email DOWN
                 self.logger.info(f"{name} ({ip}) DOWN confermato dopo {self.retries} tentativi.")
                 try:
@@ -270,7 +272,7 @@ class Monitor:
                     # calcola durata DOWN se presente
                     extra = ""
                     if ip in self.down_times:
-                        down_duration = datetime.now() - self.down_times[ip]
+                        down_duration = datetime.now(self.local_tz) - self.down_times[ip]
                         minutes = int(down_duration.total_seconds() / 60)
                         seconds = int(down_duration.total_seconds() % 60)
                         extra = f"Tempo di DOWN: {minutes} minuti e {seconds} secondi"
