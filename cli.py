@@ -139,7 +139,7 @@ def list(filter_keyword):
 
     click.echo("\n")
     for c in conns:
-        enabled_icon = '▶️' if c['enabled'] else '⏸️'
+        enabled_icon = '▶' if c['enabled'] else '⏸'
         st = c['status']
         status_icon = _get_status_icon(st)
         click.echo(f"{enabled_icon} {status_icon} {c['name']:<{max_name}} | {c['ip']:<{max_ip}} | {st}")
