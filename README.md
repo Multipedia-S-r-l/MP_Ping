@@ -24,7 +24,11 @@
 `/etc/default/mp_ping`
 
 ### Comandi per il servizio linux
+- `mp_ping status`: status relativo al servizio systemd
+- `mp_ping restart`: riavvio del servizio systemd (se viene modificato l'elenco connessioni con `conn (add|remove|pause|resume)`)
+
+### Comandi per il servizio linux (SOLO con utente multipedia)
 - `systemctl daemon-reload`: aggiornamento di tutti i servizi systemd (se modifico il file systemd)
-- `systemctl restart mp_ping`: riavvio del servizio systemd (se vengono modificati i file)
+- `systemctl restart mp_ping`: riavvio del servizio systemd (se vengono modificati i file o l'elenco connessioni)
 - `systemctl status mp_ping -l`: status relativo al servizio systemd
 - `journalctl -u mp_ping -f`: Log in real-time
