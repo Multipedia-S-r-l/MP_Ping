@@ -17,11 +17,16 @@
 - `conn list`: elenca tutte le connessioni monitorate. Parametro opzionale `--filter` per avere keyword su name o ip
 
 ## Configurazioni del progetto
-### Percorso base
-`/opt/mp_ping`
+### Server INFO
+IP: 192.168.0.10
+Name: srv-linux
+Percorso base: `/opt/mp_ping`
+Variabili ambiente: `/etc/default/mp_ping`
 
-### Variabili ambiente
-`/etc/default/mp_ping`
+### Utenti
+- Andrea: andrea | A2025c
+- Riccardo: riccardo | R2025r
+- Erik: erik | E2025c
 
 ### Comandi per il servizio linux
 - `mp_ping status`: status relativo al servizio systemd
