@@ -12,8 +12,8 @@
 ## Comandi per modificare le connessioni
 - `conn add`: aggiunge nuova connessione con parametri `--name` e `--ip`
 - `conn remove`: rimuove una connessione con parametri `--name` o `--ip` (in OR)
-- `conn pause`: mette in pausa una connessione con parametro `--name`
-- `conn resume`: riprende il monitoraggio della connessione con parametro `--name`
+- `conn pause`: mette in pausa una connessione con parametro `--ip`
+- `conn resume`: riprende il monitoraggio della connessione con parametro `--ip`
 - `conn list`: elenca tutte le connessioni monitorate. Parametro opzionale `--filter` per avere keyword su name o ip
 
 ## Configurazioni del progetto

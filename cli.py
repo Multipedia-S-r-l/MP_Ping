@@ -110,18 +110,18 @@ def remove(name, ip):
     click.echo(f'Rimosse {removed} connessioni')
 
 @conn.command()
-@click.option('--name', required=True, help='Nome connessione')
-def pause(name):
+@click.option('--ip', required=True, help='Indirizzo IP')
+def pause(ip):
     monitor = Monitor()
-    monitor.pause_connection(name)
-    click.echo(f'Connessione {name} in pausa')
+    monitor.pause_connection(ip)
+    click.echo(f'Connessione {ip} in pausa')
 
 @conn.command()
-@click.option('--name', required=True, help='Nome connessione')
-def resume(name):
+@click.option('--ip', required=True, help='Indirizzo IP')
+def resume(ip):
     monitor = Monitor()
-    monitor.resume_connection(name)
-    click.echo(f'Connessione {name} riattivata')
+    monitor.resume_connection(ip)
+    click.echo(f'Connessione {ip} riattivata')
 
 @conn.command()
 @click.option('--filter', 'filter_keyword', default=None, help='Filtro per nome o IP')

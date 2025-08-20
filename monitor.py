@@ -183,16 +183,16 @@ class Monitor:
         return before - len(self.connections)
 
 
-    def pause_connection(self, name):
+    def pause_connection(self, ip):
         for c in self.connections:
-            if c['name'] == name:
+            if c['ip'] == ip:
                 c['enabled'] = False
         self.save_connections()
 
 
-    def resume_connection(self, name):
+    def resume_connection(self, ip):
         for c in self.connections:
-            if c['name'] == name:
+            if c['ip'] == ip:
                 c['enabled'] = True
         self.save_connections()
 
