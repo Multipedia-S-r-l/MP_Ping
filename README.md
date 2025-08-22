@@ -62,6 +62,8 @@ Crea snapshot atomici di `status.json` e rimuove i backup più vecchi della rete
 - Esecuzione immediata snapshot: `systemctl start mp_status_backup.service`
 - Log ultimi run: `journalctl -u mp_status_backup.service -n 100 --no-pager`
 - Directory backup: `/var/backups/mp_ping`
+  - Elenco files: `ls -l /var/backups/mp_ping`
+  - Visualizza file: `cat /var/backups/mp_ping/status_YYYYMMDD_HHMMSS.json`
 
 ### Note:
 - Dopo modifiche ai file `.service`/`.timer`: `systemctl daemon-reload` e poi `systemctl restart mp_status_backup.timer` (utente `multipedia`).
