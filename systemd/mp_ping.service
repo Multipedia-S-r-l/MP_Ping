@@ -1,0 +1,28 @@
+[Unit]
+Description=MP Ping Monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=multipedia
+Group=multipedia
+WorkingDirectory=/opt/mp_ping
+# Carica le variabili da /etc/default/mp_ping
+EnvironmentFile=/etc/default/mp_ping
+# Usa il python nel venv per avviare il comando cli => "monitor start"
+# Aggiungi --config se vuoi forzare il file config
+ExecStart=/opt/mp_ping/.venv/bin/python /opt/mp_ping/cli.py monitor start --config ${MP_PING_CONFIG} --interval ${MP_PING_INTERVAL}
+# ExecReload permette `systemctl reload mp_ping` -> invia SIGHUP al processo
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+# Optional: limita file aperti
+LimitNOFILE=4096
+# Log attaccati al journal; puoi anche loggare su file dal codice
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=mp_ping
+
+[Install]
+WantedBy=multi-user.target

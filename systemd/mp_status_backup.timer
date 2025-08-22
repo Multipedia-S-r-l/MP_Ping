@@ -1,0 +1,11 @@
+[Unit]
+Description=Timer per snapshot mp_ping (08:30,13:30,18:30)
+
+[Timer]
+OnCalendar=*-*-* 08:30:00
+OnCalendar=*-*-* 13:30:00
+OnCalendar=*-*-* 18:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

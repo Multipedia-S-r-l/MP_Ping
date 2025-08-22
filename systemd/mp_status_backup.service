@@ -1,0 +1,11 @@
+[Unit]
+Description=MP Ping status snapshot (oneshot)
+
+[Service]
+Type=oneshot
+User=multipedia
+Group=mp_users
+EnvironmentFile=/etc/default/mp_status_backup
+# usa il python del venv per avere portalocker e dipendenze corrette
+ExecStart=/opt/mp_ping/.venv/bin/python /usr/local/bin/mp_status_backup.py
+Nice=10
