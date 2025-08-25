@@ -38,6 +38,9 @@ class Monitor:
         # controllo del loop e struttura per retry threads
         self.running = Event()
         self.running.set()
+        # event per segnalare lo STOP (usato per wait interruptible)
+        self.stop_event = Event()
+
         self.retry_threads = {}     # ip -> Thread
         self.retry_lock = Lock()    # protegge retry_threads
 
@@ -75,8 +78,14 @@ class Monitor:
         """
         try:
             for attempt in range(self.retries):
-                # aspetta il retry interval
-                time.sleep(self.retry_interval)
+                if self.stop_event.is_set():
+                    break
+
+                # aspetta in modo interrompibile il retry interval
+                self.stop_event.wait(self.retry_interval)
+
+                if self.stop_event.is_set():
+                    break
 
                 try:
                     resp = ping(ip, timeout=2)
@@ -165,7 +174,7 @@ class Monitor:
                 return
             except Exception as e:
                 self.logger.error(f'Errore salvataggio connessioni: {e}')
-                time.sleep(0.5)
+                self.stop_event.wait(0.5)
         raise RuntimeError('Impossibile salvare le connessioni dopo 5 tentativi.')
 
 
@@ -242,8 +251,12 @@ class Monitor:
         """
         results = []
         for conn in self.connections:
+            # se è stato richiesto lo stop esci subito
+            if self.stop_event.is_set():
+                self.logger.info("Stop richiesto: interrompo ping_all.")
+                break
+
             if not conn.get('enabled', True):
-                # connessioni in pausa non riportano stato
                 with self.lock:
                     self.last_status[conn['ip']] = 'UNKNOWN'
                 continue
@@ -254,11 +267,14 @@ class Monitor:
             try:
                 response = ping(ip, timeout=2)
             except Exception as e:
-                # in caso di eccezione ping3, trattiamo come failure
                 self.logger.debug(f'Errore ping {ip}: {e}')
                 response = None
 
-            # stato rilevato in questo ciclo
+            # dopo il ping, se arriva stop esci subito prima di processare troppo
+            if self.stop_event.is_set():
+                self.logger.info("Stop richiesto dopo un ping: esco dal ciclo.")
+                break
+
             observed = 'UP' if response else 'DOWN'
 
             with self.lock:
@@ -388,15 +404,40 @@ class Monitor:
     def stop(self):
         """Ferma il loop del monitor in modo pulito."""
         try:
-            self.running.clear()
+            # segnala STOP ai loop e worker
+            self.stop_event.set()
+            # mantieni compatibilità: clear dell'event 'running'
+            try:
+                self.running.clear()
+            except Exception:
+                pass
+
+            # aspetta che i worker finiscano, ma non sommare timeout per ciascuno
+            # invece aspettiamo un timeout totale (es. 10 secondi) per tutti i worker
+            timeout_total = 10.0
+            deadline = time.time() + timeout_total
+            with self.retry_lock:
+                threads = list(self.retry_threads.values())
+            for t in threads:
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    break
+                # join con timeout limitato (non sommiamo i timeout)
+                t.join(timeout=min(1.0, remaining))
+            # dopo l'attesa, logga se ci sono ancora thread vivi
+            with self.retry_lock:
+                still = [ip for ip in self.retry_threads.keys()]
+            if still:
+                self.logger.warning(f"Stop: worker ancora attivi dopo {timeout_total}s: {still}")
             self.logger.info("Monitor stop requested.")
         except Exception:
             pass
 
 
+
     # chiamare dump_status dopo ogni ciclo di ping, es.: in run_monitor_loop():
     def run_monitor_loop(self):
-        while self.running.is_set():
+        while not self.stop_event.is_set():
             # ricarica conf se implementato...
             try:
                 self.ping_all()
@@ -404,4 +445,5 @@ class Monitor:
                 self.logger.exception(f"Errore in ping_all: {e}")
             # dopo il ciclo di ping scriviamo lo stato
             self.dump_status()
-            time.sleep(self.interval)
+            # attendi l'intervallo ma esci immediatamente se arriva stop_event
+            self.stop_event.wait(self.interval)

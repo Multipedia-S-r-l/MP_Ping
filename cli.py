@@ -3,6 +3,7 @@
 import click
 import signal
 import sys
+from threading import Thread
 from monitor import Monitor
 import json
 import os
@@ -46,25 +47,50 @@ def monitor():
 def start(config, interval):
     """Avvia il monitor come daemon."""
     monitor = Monitor(config_path=config, interval=interval)
-    def handle_sigterm(signum, frame):
-        click.echo('Ricevuto SIGTERM, arresto monitor...')
+
+    # handler di segnali: semplici e sicuri
+    def _handle_termination(signum, frame):
+        try:
+            click.echo('Ricevuto segnale di terminazione, arresto monitor...')
+        except Exception:
+            pass
         try:
             monitor.stop()
         except Exception:
             pass
-    def handle_sigint(signum, frame):
-        click.echo('Ricevuto SIGINT, arresto monitor...')
-        try:
-            monitor.stop()
-        except Exception:
-            pass
-    signal.signal(signal.SIGTERM, handle_sigterm)
-    signal.signal(signal.SIGINT, handle_sigint)
-    click.echo('Monitor avviato. Premi Ctrl+C per uscire.')
+
+    # registra i segnali nel main thread (systemd invia SIGTERM)
+    signal.signal(signal.SIGTERM, _handle_termination)
+    signal.signal(signal.SIGINT, _handle_termination)
+
+    # avvia il loop principale in background: il main thread rimane reattivo ai segnali
+    worker = Thread(target=monitor.run_monitor_loop, name="mp_ping-main-loop", daemon=True)
+    worker.start()
+    click.echo('Monitor avviato in background. Premi Ctrl+C per uscire.')
+
     try:
-        monitor.run_monitor_loop()
+        # attendi il worker senza bloccare la gestione dei segnali:
+        while worker.is_alive():
+            # join a breve intervallo per consentire al main thread di ricevere signals
+            worker.join(timeout=1.0)
     except KeyboardInterrupt:
-        click.echo('Interrotto da tastiera.')
+        # se l'utente preme Ctrl+C in TTY
+        try:
+            click.echo('Interruzione da tastiera, arresto monitor...')
+        except Exception:
+            pass
+        monitor.stop()
+    finally:
+        # assicurati di aver scritto lo stato finale
+        try:
+            worker.join(timeout=5.0)
+        except Exception:
+            pass
+        try:
+            monitor.dump_status()
+        except Exception:
+            pass
+        click.echo('Monitor terminato.')
 
 @monitor.command()
 def status():
@@ -151,4 +177,4 @@ def list(filter_keyword):
     click.echo(f"\nTotali: UP={up_count} | DOWN={down_count} | CHECKING={checking_count} | Pausa={paused_count}\n")
     
 if __name__ == '__main__':
-    cli() 
+    cli()
