@@ -10,6 +10,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from threading import Lock, Event, Thread
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class Monitor:
     def __init__(self, config_path=None, status_path=None, interval=None):
@@ -242,101 +243,105 @@ class Monitor:
         return out
 
 
+    def _ping_one(self, conn):
+        """Ping one connection; returns (name, ip, status)."""
+        ip = conn.get('ip')
+        name = conn.get('name', '<no name>')
+        if not conn.get('enabled', True):
+            return name, ip, 'UNKNOWN'
+        try:
+            resp = ping(ip, timeout=2)
+            status = 'UP' if resp else 'DOWN'
+        except Exception as e:
+            self.logger.debug(f"Errore ping {ip}: {e}")
+            status = 'DOWN'
+        return name, ip, status
+
+
     def ping_all(self):
         """
-        Esegue un ping su tutte le connessioni configurate.
-        Quando viene rilevato un primo DOWN, non invia subito la mail: entra in fase di CHECKING
-        e lancia un worker che esegue self.retries tentativi distanziati di self.retry_interval secondi.
-        Solo se tutti i tentativi falliscono viene inviata la mail di DOWN.
+        Esegue ping in parallelo usando un ThreadPoolExecutor.
+        Mantiene la logica originale per UP/CHECKING/DOWN e rispetta self.stop_event.
         """
         results = []
-        for conn in self.connections:
-            # se è stato richiesto lo stop esci subito
-            if self.stop_event.is_set():
-                self.logger.info("Stop richiesto: interrompo ping_all.")
-                break
+        if not self.connections:
+            return results
 
-            if not conn.get('enabled', True):
+        max_workers = min(20, max(1, len(self.connections)))
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_map = {executor.submit(self._ping_one, conn): conn for conn in self.connections}
+
+            for fut in as_completed(future_map):
+                # se è stato segnalato stop, interrompi la raccolta
+                if self.stop_event.is_set():
+                    self.logger.info("Stop richiesto: interrompo raccolta risultati ping.")
+                    break
+
+                try:
+                    name, ip, observed = fut.result()
+                except Exception as e:
+                    self.logger.debug(f"Errore ottenendo risultato ping: {e}")
+                    continue
+
+                # se disabilitata
+                if observed == 'UNKNOWN':
+                    with self.lock:
+                        self.last_status[ip] = 'UNKNOWN'
+                    results.append({'name': name, 'ip': ip, 'status': 'UNKNOWN'})
+                    continue
+
                 with self.lock:
-                    self.last_status[conn['ip']] = 'UNKNOWN'
-                continue
+                    prev_status = self.last_status.get(ip)
 
-            ip = conn['ip']
-            name = conn['name']
+                # Gestione UP
+                if observed == 'UP':
+                    if prev_status == 'DOWN':
+                        up_time = datetime.now(self.local_tz)
+                        extra = f"Connessione UP alle {up_time.strftime('%H:%M:%S')}"
+                        if ip in self.down_times:
+                            down_duration = datetime.now(self.local_tz) - self.down_times[ip]
+                            minutes = int(down_duration.total_seconds() / 60)
+                            seconds = int(down_duration.total_seconds() % 60)
+                            extra += f"\nTempo di DOWN: {minutes} minuti e {seconds} secondi"
+                            del self.down_times[ip]
+                        with self.lock:
+                            self.last_status[ip] = 'UP'
+                        try:
+                            self.send_email_alert(name, ip, 'UP', extra)
+                        except Exception as e:
+                            self.logger.error(f"Errore invio email UP per {ip}: {e}")
+                    else:
+                        with self.lock:
+                            self.last_status[ip] = 'UP'
+                    with self.retry_lock:
+                        if ip in self.retry_threads:
+                            pass
 
-            try:
-                response = ping(ip, timeout=2)
-            except Exception as e:
-                self.logger.debug(f'Errore ping {ip}: {e}')
-                response = None
-
-            # dopo il ping, se arriva stop esci subito prima di processare troppo
-            if self.stop_event.is_set():
-                self.logger.info("Stop richiesto dopo un ping: esco dal ciclo.")
-                break
-
-            observed = 'UP' if response else 'DOWN'
-
-            with self.lock:
-                prev_status = self.last_status.get(ip)
-
-            # Se osservato UP
-            if observed == 'UP':
-                # se prima era DOWN (o UNKNOWN), invia UP immediatamente (se è una transizione DOWN->UP)
-                # manteniamo comportamento precedente: invia notifica UP al passaggio da DOWN->UP
-                if prev_status == 'DOWN':
-                    # calcola durata DOWN se presente
-                    up_time = datetime.now(self.local_tz)
-                    extra = f"Connessione UP alle {up_time.strftime('%H:%M:%S')}"
-                    if ip in self.down_times:
-                        down_duration = datetime.now(self.local_tz) - self.down_times[ip]
-                        minutes = int(down_duration.total_seconds() / 60)
-                        seconds = int(down_duration.total_seconds() % 60)
-                        extra += f"\nTempo di DOWN: {minutes} minuti e {seconds} secondi"
-                        del self.down_times[ip]
-                    # setta stato
-                    with self.lock:
-                        self.last_status[ip] = 'UP'
-                    # invia notifica UP
-                    try:
-                        self.send_email_alert(name, ip, 'UP', extra)
-                    except Exception as e:
-                        self.logger.error(f"Errore invio email UP per {ip}: {e}")
+                # Gestione DOWN / CHECKING
                 else:
-                    # semplicemente aggiorna a UP
-                    with self.lock:
-                        self.last_status[ip] = 'UP'
-                # se esiste un worker di conferma in corso, segnaliamo che è recuperato
-                with self.retry_lock:
-                    if ip in self.retry_threads:
-                        # lasciamo che il worker termini al prossimo controllo (worker verifica last_status)
-                        # oppure possiamo rimuovere subito la traccia così non verrà duplicato un nuovo worker
-                        # (ma lasciamo il worker leggere last_status e terminare)
-                        pass
+                    if prev_status == 'DOWN':
+                        with self.lock:
+                            self.last_status[ip] = 'DOWN'
+                    elif prev_status == 'CHECKING':
+                        with self.lock:
+                            self.last_status[ip] = 'CHECKING'
+                    else:
+                        with self.lock:
+                            self.last_status[ip] = 'CHECKING'
+                        self.logger.info(f"Prima rilevazione DOWN per {name} ({ip}) — avviata procedura di conferma ({self.retries} tentativi ogni {self.retry_interval}s)")
+                        # controlla stop prima di schedulare
+                        if not self.stop_event.is_set():
+                            self.schedule_confirm_down(name, ip)
 
-            # Se osservato DOWN
-            else:
-                # se precedente stato era DOWN -> è già DOWN, mantieni stato e (se non è stata inviata mail, probabilmente l'abbiamo già inviata)
-                if prev_status == 'DOWN':
-                    with self.lock:
-                        self.last_status[ip] = 'DOWN'
-                # se precedente era CHECKING (già in conferma) -> mantieni CHECKING (o DOWN se già confermato)
-                elif prev_status == 'CHECKING':
-                    # mantieni lo stato (il worker deciderà)
-                    with self.lock:
-                        self.last_status[ip] = 'CHECKING'
-                else:
-                    # prima era UP o UNKNOWN: avvia la conferma DOWN
-                    with self.lock:
-                        self.last_status[ip] = 'CHECKING'
-                    self.logger.info(f"Prima rilevazione DOWN per {name} ({ip}) — avviata procedura di conferma ({self.retries} tentativi ogni {self.retry_interval}s)")
-                    self.schedule_confirm_down(name, ip)
+                # log e raccolta risultati
+                with self.lock:
+                    current_status = self.last_status.get(ip, 'UNKNOWN')
+                results.append({'name': name, 'ip': ip, 'status': current_status})
+                self.logger.info(f'{name} ({ip}) {current_status}')
 
-            # log e raccolta risultati
-            with self.lock:
-                current_status = self.last_status.get(ip, 'UNKNOWN')
-            results.append({'name': name, 'ip': ip, 'status': current_status})
-            self.logger.info(f'{name} ({ip}) {current_status}')
+        # opzionale: cancella future rimanenti (se stop_event è stato settato)
+        # i thread in esecuzione termineranno in breve (timeout ping)
         return results
 
 
