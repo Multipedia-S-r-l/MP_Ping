@@ -9,7 +9,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 DEF_STATUS_PATH = "/opt/mp_ping/status.json"
-DEF_STATE_PATH = "/var/lib/mp_ping/watchdog_state.json"
+# DEF_STATE_PATH = "/var/lib/mp_ping/watchdog_state.json"
 
 def parse_args():
     ap = argparse.ArgumentParser(
@@ -21,8 +21,8 @@ def parse_args():
                     help="Età massima consentita dello snapshot in secondi (default: 3600)")
     ap.add_argument("--suppress-minutes", type=int, default=int(os.getenv("MP_SUPPRESS_MIN", "120")),
                     help="Minuti di soppressione per evitare email duplicate (default: 120)")
-    ap.add_argument("--state-file", default=os.getenv("MP_STATE_FILE", DEF_STATE_PATH),
-                    help=f"Percorso file di stato per la soppressione (default: %(default)s)")
+#     ap.add_argument("--state-file", default=os.getenv("MP_STATE_FILE", DEF_STATE_PATH),
+#                     help=f"Percorso file di stato per la soppressione (default: %(default)s)")
     ap.add_argument("--require-some-up", action="store_true",
                     default=os.getenv("MP_REQUIRE_SOME_UP", "1") not in ("0", "false", "False"),
                     help="Alza allarme se nessun host è UP (default: attivo)")
@@ -69,12 +69,13 @@ def send_email_alert(subject, body):
     smtp_pass = os.getenv("SMTP_PASS", "")
     mail_from = os.getenv("SMTP_FROM", "")
     mail_to = [x.strip() for x in os.getenv("SMTP_TO", "").split(",") if x.strip()]
+    sender_name = os.environ.get('EMAIL_NAME', 'Multipedia Ping')
 
-    if not all([smtp_host, mail_from, mail_to]):
+    if not all([smtp_host, mail_from, mail_to, smtp_user, smtp_pass]):
         raise RuntimeError("SMTP non configurato: servono SMTP_HOST, SMTP_FROM, SMTP_TO (e se necessario SMTP_USER/SMTP_PASS).")
-    
+
     msg = MIMEMultipart()
-    msg['From'] = mail_from
+    msg['From'] = f"{sender_name} <{mail_from}>"
     msg['To'] = ", ".join(mail_to)
     msg['Subject'] = subject
     msg.attach(MIMEText(body, 'plain'))
@@ -87,27 +88,27 @@ def send_email_alert(subject, body):
     except Exception as e:
         raise RuntimeError(f'Errore invio email: {e}')
 
-def ensure_parent(path: Path):
-    path.parent.mkdir(parents=True, exist_ok=True)
+# def ensure_parent(path: Path):
+#     path.parent.mkdir(parents=True, exist_ok=True)
 
-def load_state(path: Path):
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {}
+# def load_state(path: Path):
+#     try:
+#         with open(path, "r", encoding="utf-8") as f:
+#             return json.load(f)
+#     except Exception:
+#         return {}
 
-def save_state(path: Path, data: dict):
-    ensure_parent(path)
-    tmp = path.with_suffix(".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, path)
+# def save_state(path: Path, data: dict):
+#     ensure_parent(path)
+#     tmp = path.with_suffix(".tmp")
+#     with open(tmp, "w", encoding="utf-8") as f:
+#         json.dump(data, f, ensure_ascii=False, indent=2)
+#     os.replace(tmp, path)
 
 def main():
     args = parse_args()
     status_path = Path(args.status)
-    state_path = Path(args.state_file)
+    # state_path = Path(args.state_file)
 
     data = load_json(status_path)
     issues = []
@@ -138,38 +139,37 @@ def main():
             issues.append("all_down")
 
     # Soppressione email duplicate
-    state = load_state(state_path)
-    last_sig = state.get("last_signature")
-    last_sent = state.get("last_sent_epoch", 0)
-    now_epoch = int(datetime.now(timezone.utc).timestamp())
+    # state = load_state(state_path)
+    # last_sig = state.get("last_signature")
+    # last_sent = state.get("last_sent_epoch", 0)
+    # now_epoch = int(datetime.now(timezone.utc).timestamp())
 
     signature = "|".join(sorted(issues)) if issues else "OK"
 
     # Report & invio
-    hostname = socket.gethostname()
-    subject_base = f"[mp_ping watchdog @ {hostname}]"
+    subject_base = f"[mp_ping watchdog]"
 
-    if not issues:
-        # Se rientra OK dopo errore, invia un RECOVERY (una sola volta)
-        if last_sig and last_sig != "OK":
-            body = "\n".join([
-                f"Watchdog OK (recovery).",
-                f"File: {status_path}",
-                *details
-            ])
-            try:
-                send_email_alert(subject=f"{subject_base} RECOVERY", body=body)
-            except Exception as e:
-                print(f"Errore invio email (recovery): {e}", file=sys.stderr)
-                return 2
-        # Aggiorna stato
-        save_state(state_path, {"last_signature": "OK", "last_sent_epoch": now_epoch})
-        print("Watchdog OK.")
-        return 0
+    # if not issues:
+    #     # Se rientra OK dopo errore, invia un RECOVERY (una sola volta)
+    #     if last_sig and last_sig != "OK":
+    #         body = "\n".join([
+    #             f"Watchdog OK (recovery).",
+    #             f"File: {status_path}",
+    #             *details
+    #         ])
+    #         try:
+    #             send_email_alert(subject=f"{subject_base} RECOVERY", body=body)
+    #         except Exception as e:
+    #             print(f"Errore invio email (recovery): {e}", file=sys.stderr)
+    #             return 2
+    #     # Aggiorna stato
+    #     save_state(state_path, {"last_signature": "OK", "last_sent_epoch": now_epoch})
+    #     print("Watchdog OK.")
+    #     return 0
 
     # Ci sono problemi → valuta soppressione
-    suppress_sec = args.suppress_minutes * 60
-    should_suppress = (signature == last_sig) and (now_epoch - int(last_sent)) < suppress_sec
+    # suppress_sec = args.suppress_minutes * 60
+    # should_suppress = (signature == last_sig) and (now_epoch - int(last_sent)) < suppress_sec
 
     body = "\n".join([
         f"Issues: {', '.join(issues)}",
@@ -177,18 +177,20 @@ def main():
         *details
     ])
 
-    if should_suppress:
-        print(f"Problemi rilevati ma email soppressa (signature={signature}).")
-        return 1
+    # if should_suppress:
+    #     print(f"Problemi rilevati ma email soppressa (signature={signature}).")
+    #     return 1
 
-    try:
-        send_email_alert(subject=f"{subject_base} ALERT: {','.join(issues)}", body=body)
-    except Exception as e:
-        print(f"Errore invio email: {e}", file=sys.stderr)
-        return 2
+    if len(issues) > 0:
+        try:
+            send_email_alert(subject=f"{subject_base} ALERT: {','.join(issues)}", body=body)
+        except Exception as e:
+            print(f"Errore invio email: {e}", file=sys.stderr)
+            return 2
 
-    save_state(state_path, {"last_signature": signature, "last_sent_epoch": now_epoch})
-    print(f"Inviata email di ALERT (signature={signature}).")
+        # save_state(state_path, {"last_signature": signature, "last_sent_epoch": now_epoch})
+        print(f"Inviata email di ALERT (signature={signature}).")
+
     return 0
 
 if __name__ == "__main__":
