@@ -1,0 +1,11 @@
+[Unit]
+Description=Esecuzione oraria del watchdog mp_ping
+
+[Timer]
+OnCalendar=hourly
+AccuracySec=1min
+Persistent=false
+Unit=mp_ping_watchdog.service
+
+[Install]
+WantedBy=timers.target

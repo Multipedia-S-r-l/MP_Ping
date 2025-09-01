@@ -1,0 +1,14 @@
+[Unit]
+Description=Watchdog per mp_ping (controlla status.json e invia email in caso di problemi)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=multipedia
+Group=mp_users
+EnvironmentFile=/etc/default/mp_ping_watchdog
+ExecStart=/opt/mp_ping/.venv/bin/python /usr/local/bin/mp_ping_watchdog.py
+# Se preferisci parametri espliciti, usa ad es.:
+# ExecStart=/opt/mp_ping/.venv/bin/python /usr/local/bin/mp_ping_watchdog.py --status /opt/mp_ping/status.json --max-age-seconds 3600 --suppress-minutes 120 --require-some-up
+Nice=10
