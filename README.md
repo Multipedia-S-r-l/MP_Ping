@@ -23,6 +23,7 @@
 - Percorso base: `/opt/mp_ping`
 - Variabili ambiente: `/etc/default/mp_ping`
 - Comandi wrapper: `/usr/local/bin`
+- Accesso al server: `ssh nomeutente@ip` o `ssh nomeutente@name`
 
 ### Utenti
 - Andrea: andrea | A2025c
