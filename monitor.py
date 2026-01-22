@@ -3,6 +3,7 @@ import json
 import time
 import logging
 import portalocker
+import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from ping3 import ping
@@ -120,6 +121,14 @@ class Monitor:
                     pass
 
 
+    def _get_sort_key(self, connection):
+        """Restituisce una chiave di ordinamento per la connessione, rimuovendo tag come [Backup] dal nome."""
+        name = connection.get('name', '')
+        # Rimuove pattern come [Backup], [backup], [BACKUP], [Tag], ecc.
+        cleaned_name = re.sub(r'\s*\[.*?\]\s*', ' ', name).strip()
+        return cleaned_name.lower()
+
+
     def setup_logger(self):
         logger = logging.getLogger('mp_ping')
         if logger.handlers:
@@ -171,6 +180,8 @@ class Monitor:
 
     def add_connection(self, name, ip):
         self.connections.append({'name': name, 'ip': ip, 'enabled': True})
+        # Ordina le connessioni per nome (escludendo tag [Backup])
+        self.connections.sort(key=self._get_sort_key)
         self.save_connections()
         self.last_status[ip] = 'UNKNOWN'
 
